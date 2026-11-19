@@ -83,6 +83,8 @@ in the repository, never echo it, never commit it.
 - YouTube, Instagram, Vimeo, Spotify: each platform's official oEmbed address, tried before the
   page itself (`OEMBED` list in `lib/fetch-page.ts`). YouTube uses the full-size thumbnail when
   the video has one.
+- IMDb links: IMDb puts a robot check in front of its pages, so the title, plot and poster come
+  from OMDb by IMDb number (`fromOmdb` in `lib/fetch-page.ts`, key `OMDB_API_KEY` in Vercel).
 - Anything else that comes in bare: open the save and paste, drop or choose a picture
   ("Add picture" / "Change picture"). The AI re-reads the save with that picture and updates
   title, summary, tags, group and search.
