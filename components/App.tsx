@@ -226,7 +226,7 @@ function Library() {
     const { data } = await supabase().auth.getUser();
     const uid = data.user?.id;
     if (!uid) return;
-    setToast("Adding the picture");
+    setToast("Reading the picture");
     const path = `${uid}/upload-${crypto.randomUUID()}`;
     const { error } = await supabase().storage.from("saves").upload(path, f, { contentType: f.type });
     if (error) { say("Upload failed. " + error.message); return; }

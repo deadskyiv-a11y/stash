@@ -63,9 +63,29 @@ export async function setPicture(a: Authed, id: string, uploadPath: string): Pro
   const picture = await storePicture(a, id, Buffer.from(await file.arrayBuffer()), 1600);
   await a.db.storage.from("saves").remove([uploadPath]);
   if (!picture) throw new Error("Could not use that picture");
+
+  // Read the save again with the screenshot, so the title, filing and search reflect what it shows.
+  const { data: row } = await a.db.from("saves").select("url,site,title,summary,content,tags,cluster,subgroup").eq("id", id).single();
+  const text = row?.content || "";
+  const reading = await read({
+    kind: "link", url: row?.url ?? null, site: row?.site ?? null, title: row?.title ?? null, description: row?.summary ?? null,
+    text, image: { data: picture.forAi, mediaType: "image/jpeg" }, existing: await existingGroups(a),
+  });
+  const update: Record<string, unknown> = { image_path: picture.path, image_w: picture.w, image_h: picture.h, is_pale: picture.pale };
+  if (reading) {
+    const tags = reading.tags || [];
+    const searchText = [reading.title, reading.summary, tags.join(" "), reading.cluster, reading.subgroup, row?.site,
+      (reading.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), "link"].filter(Boolean).join(" ");
+    const embedding = await embed(a, [reading.title, reading.summary, tags.join(", "), reading.cluster, reading.subgroup, text.slice(0, 1200)].filter(Boolean).join(". "));
+    Object.assign(update, {
+      title: reading.title || row?.title, summary: reading.summary || row?.summary, tags, cluster: reading.cluster || row?.cluster,
+      subgroup: reading.subgroup || null, facts: reading.facts || [], search_text: searchText,
+      ...(embedding ? { embedding: JSON.stringify(embedding) } : {}),
+    });
+  }
   const { data, error } = await a.db
     .from("saves")
-    .update({ image_path: picture.path, image_w: picture.w, image_h: picture.h, is_pale: picture.pale })
+    .update(update)
     .eq("id", id)
     .select(SAVE_COLUMNS)
     .single();
