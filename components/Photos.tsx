@@ -10,6 +10,7 @@ import { nameOf } from "@/lib/places";
 import { Logo } from "./Logo";
 import { PinMap, PlaceInput } from "./PlaceMap";
 import { PhotoMap } from "./PhotoMap";
+import { BigView } from "./BigView";
 
 const NAME = process.env.NEXT_PUBLIC_APP_NAME || "Stash";
 const ROOT = "Stash Photos";
@@ -55,11 +56,9 @@ export function Photos() {
   // The large view: one photo filling the screen, with arrows to move between neighbours.
   const [big, setBig] = useState(false);
   const [info, setInfo] = useState(false);
-  const [actual, setActual] = useState(false);
   const [views, setViews] = useState<Record<string, string>>({});
   const [originals, setOriginals] = useState<Record<string, string>>({});
   const [fetching, setFetching] = useState(false);
-  const stage = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState("");
   const [stars, setStars] = useState(0); // show only photos rated at least this
   const [reading, setReading] = useState(0); // photos the AI still has to look at
@@ -255,10 +254,9 @@ export function Photos() {
   // The large view steps through the photos in the order they are showing, each one once.
   const sequence = useMemo(() => [...new Set(order)], [order]);
   const at = open ? sequence.indexOf(open) : -1;
-  const closeBig = useCallback(() => { setBig(false); setInfo(false); setActual(false); setOpen(null); }, []);
+  const closeBig = useCallback(() => { setBig(false); setInfo(false); setOpen(null); }, []);
   const step = useCallback((by: number) => {
     if (at < 0 || sequence.length === 0) return;
-    setActual(false);
     setConfirmDelete(false);
     setOpen(sequence[(at + by + sequence.length) % sequence.length]);
   }, [at, sequence]);
@@ -337,24 +335,8 @@ export function Photos() {
     setFetching(false);
   };
 
-  // Keys in the large view: arrows to move, 1 to 5 to rate, 0 to clear, I for details, Esc to leave.
-  useEffect(() => {
-    if (!big) return;
-    const key = (e: KeyboardEvent) => {
-      const a = document.activeElement;
-      if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a instanceof HTMLSelectElement) return;
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
-      else if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
-      else if (e.key === "Escape") { e.stopImmediatePropagation(); closeBig(); }
-      else if (e.key.toLowerCase() === "i") setInfo((x) => !x);
-      else if (/^[0-5]$/.test(e.key) && opened) edit(opened, { rating: e.key === "0" ? null : Number(e.key) });
-    };
-    window.addEventListener("keydown", key, true);
-    return () => window.removeEventListener("keydown", key, true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [big, step, closeBig, opened]);
-
+  const toggleInfo = useCallback(() => setInfo((x) => !x), []);
+  const rate = (n: number | null) => { if (opened) edit(opened, { rating: n }); };
   const day = (iso: string | null) => { if (!iso) return ""; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
   const remove = async (p: Photo) => {
@@ -384,7 +366,7 @@ export function Photos() {
                 const w = p.w && p.h ? Math.round((180 * p.w) / p.h) : 180;
                 return (
                   <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "")} style={{ width: w }} aria-label={p.name} aria-pressed={selecting ? chosen.has(p.id) : undefined}
-                    onClick={(e) => { if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setActual(false); setInfo(false); setOpen(p.id); setBig(true); } }}>
+                    onClick={(e) => { if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setInfo(false); setOpen(p.id); setBig(true); } }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {url ? <img src={url} alt="" loading="lazy" decoding="async" /> : <span className="tile-text muted">{p.thumb_path ? "" : p.name}</span>}
                     {p.rating ? <span className="stars" aria-label={`${p.rating} stars`}>{p.rating}★</span> : null}
@@ -472,48 +454,14 @@ export function Photos() {
         </div>
       </footer>
 
-      {big && opened && (() => {
-        const src = originals[opened.id] || (opened.view_path ? views[opened.view_path] : undefined) || (opened.thumb_path ? urls[opened.thumb_path] : undefined);
-        const small = !originals[opened.id] && !opened.view_path;
-        return (
-          <div className={"lightbox" + (info ? " with-info" : "")} role="dialog" aria-label={opened.name}>
-            <div ref={stage} className={"lb-stage" + (actual ? " actual" : "")} title={actual ? "Click to fit the screen" : "Click for real size"}
-              onClick={(e) => {
-                // Going to real size, keep the spot that was clicked in the middle of the screen.
-                const img = stage.current?.querySelector("img");
-                const r = img?.getBoundingClientRect();
-                const fx = r && r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0.5;
-                const fy = r && r.height ? Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) : 0.5;
-                const going = !actual;
-                setActual(going);
-                if (going) requestAnimationFrame(() => {
-                  const s = stage.current, i = s?.querySelector("img");
-                  if (!s || !i) return;
-                  s.scrollLeft = fx * i.offsetWidth - s.clientWidth / 2;
-                  s.scrollTop = fy * i.offsetHeight - s.clientHeight / 2;
-                });
-              }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              {src ? <img key={opened.id} src={src} alt={opened.name} draggable={false} /> : <span className="muted">{opened.name}</span>}
-            </div>
-            <div className="lb-top">
-              <span className="meta">{at + 1} of {sequence.length}  ·  {opened.name}{small ? "  ·  small preview" : originals[opened.id] ? "  ·  original" : ""}</span>
-              <span className="lb-actions">
-                {!originals[opened.id] && opened.drive_id && <button type="button" className="pill-btn" disabled={fetching} onClick={() => loadOriginal(opened)}>{fetching ? "Fetching" : "Load the original"}</button>}
-                <button type="button" className={info ? "ink" : "pill-btn"} onClick={() => setInfo((x) => !x)}>Details</button>
-                <button type="button" className="pill-btn" onClick={closeBig}>Close</button>
-              </span>
-            </div>
-            <button type="button" className="lb-nav prev" aria-label="Previous photo" onClick={() => step(-1)}>‹</button>
-            <button type="button" className="lb-nav next" aria-label="Next photo" onClick={() => step(1)}>›</button>
-            <div className="lb-bottom rate" role="group" aria-label="Rating">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button key={n} type="button" className={(opened.rating || 0) >= n ? "on" : ""} aria-label={`${n} ${n === 1 ? "star" : "stars"}`} onClick={() => edit(opened, { rating: opened.rating === n ? null : n })}>★</button>
-              ))}
-            </div>
-          </div>
-        );
-      })()}
+      {big && opened && (
+        <BigView key={opened.id} name={opened.name} info={info} rating={opened.rating} fetching={fetching}
+          src={originals[opened.id] || (opened.view_path ? views[opened.view_path] : undefined) || (opened.thumb_path ? urls[opened.thumb_path] : undefined)}
+          place={`${at + 1} of ${sequence.length}`}
+          note={originals[opened.id] ? "original" : opened.view_path ? "" : "small preview"}
+          canLoad={!originals[opened.id] && !!opened.drive_id}
+          onStep={step} onClose={closeBig} onInfo={toggleInfo} onRate={rate} onLoad={() => loadOriginal(opened)} />
+      )}
 
       {waiting && !busy && (
         <section className="answer" aria-live="polite">
