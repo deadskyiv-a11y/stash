@@ -7,6 +7,7 @@ export type Reading = {
   cluster: string;
   subgroup: string;
   facts: { label: string; value: string }[];
+  form: string | null;
 };
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-5-5";
@@ -16,9 +17,10 @@ export function aiEnabled(): boolean {
 }
 
 const INSTRUCTIONS = `You file items into a private personal library. Read the item and reply with ONE JSON object and nothing else:
-{"title": string, "summary": string, "tags": string[], "cluster": string, "subgroup": string, "facts": [{"label": string, "value": string}]}
+{"title": string, "summary": string, "tags": string[], "cluster": string, "subgroup": string, "facts": [{"label": string, "value": string}], "form": "article" | "video" | "music" | "film" | "other"}
 
 Rules:
+- form: what kind of thing this is. article = a written piece meant to be read, such as news, a blog post, an essay or a guide. video, music and film are what they say. Anything else, including shops, tools, home pages and social posts, is other.
 - title: at most 9 words, plain and specific. Keep a good existing title.
 - summary: at most 2 sentences saying what this is and why someone would keep it. For an image, describe what it shows, including colours, materials and mood, so it can be found by description later. For a document, say what it is, who it is from and what it is for.
 - tags: 3 to 6 lowercase tags, one or two words each.
@@ -85,6 +87,7 @@ export async function read(input: {
       tags: Array.isArray(j.tags) ? j.tags.map((t: unknown) => str(t, 30).toLowerCase()).filter(Boolean).slice(0, 6) : [],
       cluster: str(j.cluster, 40),
       subgroup: str(j.subgroup, 40),
+      form: ["article", "video", "music", "film", "other"].includes(j.form) ? j.form : null,
       facts: Array.isArray(j.facts)
         ? j.facts
             .map((f: { label?: unknown; value?: unknown }) => ({ label: str(f?.label, 40), value: str(f?.value, 160) }))

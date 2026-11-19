@@ -46,7 +46,7 @@ Tokens are in `app/globals.css` under `:root`.
   repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
 - **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
   `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
-  - Migrations `0001_init.sql` and `0002_file_path.sql` are applied.
+  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql` are applied.
   - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
   - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
   - Site URL and Redirect URLs point at the live address.
@@ -109,6 +109,19 @@ in the repository, never echo it, never commit it.
 - Sub-groups show only once a group has 6 or more saves, and only for sub-groups of 2 or more.
   This is a display rule in `lib/layout.ts`. The stored sub-group is never rewritten by it.
 - A new save sits under "Inbox" while it is read, then travels to its group (0.8 seconds).
+
+**How kinds look different** (Kofi asked for this on 19 November 2026; it bends the spec's
+"no captions on the canvas" rule for articles only)
+- Articles show a caption under the picture: headline, the page's opening words (`excerpt`,
+  else the summary) and the site. The AI labels each new save's `form` (article, video, music,
+  film, other). Older saves with no label count as articles unless they came from a media site.
+  Rules are `isArticle` and `CAPTION_H` in `lib/layout.ts`, styles are `.cap` in `globals.css`.
+- Films, videos and music stay as bare pictures.
+- Quotes (a note with a source address) are grey with a quotation mark and the site name.
+  Notes Kofi types stay yellow.
+- An article's panel lists the quotes taken from its page. A quote's panel has "Open the
+  article" when that page is saved too. Pages are matched by `samePage` in `lib/layout.ts`.
+- Seen on this Mac with made-up saves. Not yet seen on the live site.
 
 **Finding**
 - Search as you type, by words and by meaning.

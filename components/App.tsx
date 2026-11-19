@@ -5,7 +5,7 @@ import type { Session } from "@supabase/supabase-js";
 import { api, supabase } from "@/lib/supabase-browser";
 import { SAVE_COLUMNS, type Kind, type Save } from "@/lib/types";
 import { pdfCover } from "@/lib/pdf-cover";
-import { clusterOf, computeLayout, type Label } from "@/lib/layout";
+import { clusterOf, computeLayout, isQuote, samePage, type Label } from "@/lib/layout";
 import { Canvas, type CanvasHandle } from "./Canvas";
 import { Logo } from "./Logo";
 
@@ -187,7 +187,7 @@ function Library() {
     const temp: Save = {
       id: tempId, kind: body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
       note: body.kind === "note" ? body.text : null, tags: [], cluster: null, subgroup: null, facts: [], image_path: null, file_path: null, image_w: null, image_h: null,
-      is_pale: false, pinned: false, created_at: new Date().toISOString(),
+      is_pale: false, pinned: false, form: null, excerpt: null, created_at: new Date().toISOString(),
     };
     setSaves((s) => [temp, ...s]);
     try {
@@ -388,7 +388,7 @@ function Library() {
             <div className="list-note">Newest first. {shown.length} {shown.length === 1 ? "save" : "saves"}.</div>
             {shown.slice(0, 500).map((s) => (
               <button key={s.id} type="button" className="row" onClick={() => { setConfirmDelete(false); setOpen(s.id); }}>
-                <span className={"thumb " + s.kind + (s.is_pale ? " pale" : "")}>
+                <span className={"thumb " + s.kind + (isQuote(s) ? " quote" : "") + (s.is_pale ? " pale" : "")}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   {s.image_path && urls[s.image_path] ? <img src={urls[s.image_path]} alt="" loading="lazy" /> : null}
                 </span>
@@ -396,7 +396,7 @@ function Library() {
                   <span className="row-title">{s.title || s.url || "Untitled"}</span>
                   <span className="row-path">{[clusterOf(s), s.subgroup].filter(Boolean).join(" / ")}{s.site ? "  ·  " + s.site : ""}</span>
                 </span>
-                <span className="row-kind">{s.kind === "image" ? "Image" : s.kind === "link" ? "Link" : s.kind === "note" ? "Note" : "PDF"}</span>
+                <span className="row-kind">{s.kind === "image" ? "Image" : s.kind === "link" ? "Link" : isQuote(s) ? "Quote" : s.kind === "note" ? "Note" : "PDF"}</span>
                 <span className="row-when">{when(s.created_at)}</span>
               </button>
             ))}
@@ -494,7 +494,21 @@ function Library() {
             }}>Open PDF</button>
           )}
           {opened.summary && <p>{opened.summary}</p>}
-          {opened.kind === "note" && opened.note && <p className="note-body">{opened.note}</p>}
+          {opened.kind === "note" && opened.note && <p className="note-body">{isQuote(opened) ? "\u201C" + opened.note + "\u201D" : opened.note}</p>}
+          {/* A quote leads back to its article, and an article lists the quotes taken from it. */}
+          {isQuote(opened) && (() => {
+            const from = saves.find((x) => x.kind === "link" && samePage(x.url, opened.url));
+            return from ? <button type="button" className="pill-btn" onClick={() => { setConfirmDelete(false); setOpen(from.id); }}>Open the article</button> : null;
+          })()}
+          {opened.kind === "link" && (() => {
+            const quotes = saves.filter((x) => isQuote(x) && samePage(x.url, opened.url));
+            return quotes.length === 0 ? null : (
+              <div className="quotes">
+                <p className="meta">Quotes from this page</p>
+                {quotes.map((x) => <button key={x.id} type="button" className="quote-row" onClick={() => { setConfirmDelete(false); setOpen(x.id); }}>{"\u201C" + (x.note || "") + "\u201D"}</button>)}
+              </div>
+            );
+          })()}
           {opened.facts.length > 0 && (
             <dl>{opened.facts.map((f, i) => (<div key={i}><dt>{f.label}</dt><dd>{f.value}</dd></div>))}</dl>
           )}

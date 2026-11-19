@@ -19,10 +19,14 @@ export type Save = {
   image_h: number | null;
   is_pale: boolean;
   pinned: boolean;
+  /** What kind of thing this is: article, video, music, film or other. Null on older saves. */
+  form: string | null;
+  /** The page's own opening words, for an article's caption. */
+  excerpt: string | null;
   created_at: string;
   /** Browser only: keeps a tile's place on screen while its temporary id is swapped for the real one. */
   _key?: string;
 };
 
 export const SAVE_COLUMNS =
-  "id,kind,status,url,site,title,summary,note,tags,cluster,subgroup,facts,image_path,file_path,image_w,image_h,is_pale,pinned,created_at";
+  "id,kind,status,url,site,title,summary,note,tags,cluster,subgroup,facts,image_path,file_path,image_w,image_h,is_pale,pinned,form,excerpt,created_at";

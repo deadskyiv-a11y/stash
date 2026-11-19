@@ -11,6 +11,28 @@ export type Tile = { id: string; x: number; y: number; w: number; h: number };
 export type Label = { key: string; name: string; count: number; x: number; y: number; cluster: string; sub: string | null };
 export type Layout = { tiles: Tile[]; byId: Map<string, Tile>; clusters: Label[]; subs: Label[] };
 
+/** Room under an article's picture for its headline, opening words and site. Matches .cap in globals.css. */
+export const CAPTION_H = 100;
+
+const MEDIA_SITES = /youtube|youtu\.be|instagram|tiktok|vimeo|spotify|imdb/i;
+
+/** An article gets a caption. The AI labels new saves; older ones go by the site they came from. */
+export function isArticle(s: Save): boolean {
+  if (s.kind !== "link") return false;
+  return s.form ? s.form === "article" : !MEDIA_SITES.test(s.site || "");
+}
+
+/** A quote is a note taken from a page, so it knows its source. A typed note has none. */
+export function isQuote(s: Save): boolean {
+  return s.kind === "note" && !!s.url;
+}
+
+/** Two addresses for the same page, ignoring the fragment, query and a trailing slash. */
+export function samePage(a: string | null, b: string | null): boolean {
+  const norm = (u: string) => { try { const x = new URL(u); return x.hostname.replace(/^www\./, "") + x.pathname.replace(/\/$/, ""); } catch { return u; } };
+  return !!a && !!b && norm(a) === norm(b);
+}
+
 export function clusterOf(s: Save): string {
   if (s.status === "processing") return "Inbox";
   return s.cluster || "Unsorted";
@@ -18,9 +40,9 @@ export function clusterOf(s: Save): string {
 
 function tileHeight(s: Save): number {
   if (s.image_path && s.image_w && s.image_h) {
-    return Math.round(Math.min(280, Math.max(70, (TILE_W * s.image_h) / s.image_w)));
+    return Math.round(Math.min(280, Math.max(70, (TILE_W * s.image_h) / s.image_w))) + (isArticle(s) ? CAPTION_H : 0);
   }
-  return s.kind === "note" ? 110 : 100;
+  return isQuote(s) ? 150 : s.kind === "note" ? 110 : 100;
 }
 
 type Block = { name: string; saves: Save[]; w: number; h: number; tiles: Tile[] };

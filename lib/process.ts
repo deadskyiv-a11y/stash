@@ -195,6 +195,8 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
         image_w: picture?.w || null,
         image_h: picture?.h || null,
         is_pale: picture?.pale || false,
+        form: reading?.form || null,
+        excerpt: page?.description ? page.description.slice(0, 300) : null,
         content: text ? text.slice(0, 6000) : null,
         search_text: searchText,
         embedding: embedding ? JSON.stringify(embedding) : null,

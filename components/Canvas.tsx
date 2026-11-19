@@ -2,7 +2,7 @@
 
 import { memo, useCallback, useEffect, useImperativeHandle, useRef, forwardRef } from "react";
 import type { Save } from "@/lib/types";
-import type { Label, Layout } from "@/lib/layout";
+import { isArticle, isQuote, type Label, type Layout } from "@/lib/layout";
 
 type Cam = { x: number; y: number; s: number };
 export type CanvasHandle = { zoomBy: (f: number) => void; refit: () => void };
@@ -30,14 +30,31 @@ const Tiles = memo(function Tiles({ saves, layout, hits, urls }: Pick<Props, "sa
         if (!t) return null;
         const url = s.image_path ? urls[s.image_path] : undefined;
         const dim = hits !== null && !hits.has(s.id);
-        const cls = ["tile", s.kind, url ? "has-image" : "", s.is_pale ? "pale" : "", s.status === "processing" ? "processing" : "", dim ? "dim" : ""].join(" ");
+        const article = !!s.image_path && isArticle(s);
+        const quote = isQuote(s);
+        const cls = ["tile", s.kind, url ? "has-image" : "", article ? "article" : "", quote ? "quote" : "", s.is_pale ? "pale" : "", s.status === "processing" ? "processing" : "", dim ? "dim" : ""].join(" ");
         return (
           <div key={s._key || s.id} data-id={s.id} className={cls} style={{ left: t.x, top: t.y, width: t.w, height: t.h }}>
             {url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={url} alt={s.title || ""} loading="lazy" decoding="async" draggable={false} />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={s.title || ""} loading="lazy" decoding="async" draggable={false} />
+                {article && (
+                  <span className="cap">
+                    <b>{s.title}</b>
+                    <span className="ex">{s.excerpt || s.summary}</span>
+                    <span className="src">{s.site}</span>
+                  </span>
+                )}
+              </>
             ) : s.status === "processing" ? (
               <span className="tile-text muted">Reading</span>
+            ) : quote ? (
+              <span className="tile-text">
+                <span className="qm" aria-hidden="true">&ldquo;</span>
+                <span className="qt">{s.note}</span>
+                <span className="muted">{s.site}</span>
+              </span>
             ) : s.kind === "note" ? (
               <span className="tile-text">{s.note || s.title}</span>
             ) : (
