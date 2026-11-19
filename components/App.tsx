@@ -204,6 +204,18 @@ function Library() {
     else add({ kind: "note", text: t }, t.slice(0, 60));
   }, [add]);
 
+  // The iPhone share button opens Stash at /#save=<link>. Save it once, then clean the address.
+  // ponytail: rides on the browser's own sign-in, so it opens Stash each time. A background save needs a personal token.
+  const shared = useRef(false);
+  useEffect(() => {
+    if (shared.current) return;
+    shared.current = true;
+    const link = new URLSearchParams(window.location.hash.slice(1)).get("save");
+    if (!link) return;
+    history.replaceState(null, "", window.location.pathname);
+    queueMicrotask(() => addText(link));
+  }, [addText]);
+
   const addFiles = useCallback(async (files: File[]) => {
     const { data } = await supabase().auth.getUser();
     const uid = data.user?.id;
