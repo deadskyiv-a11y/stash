@@ -35,6 +35,7 @@ function SignIn() {
   const [linkError] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get("error_description"));
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">(linkError ? "error" : "idle");
   const [msg, setMsg] = useState(linkError ? linkError + ". Send a new one." : "");
+  const [code, setCode] = useState("");
   return (
     <main className="signin">
       <form
@@ -48,12 +49,21 @@ function SignIn() {
           if (error) {
             setState("error");
             setMsg(/rate limit/i.test(error.message) ? "Too many sign-in emails in the last hour. Try again in an hour." : error.message);
-          } else setState("sent");
+          } else { setMsg(""); setState("sent"); }
         }}
       >
         <h1><Logo height={44} title={NAME} /></h1>
         {state === "sent" ? (
-          <p>Check your email for a sign-in link, then open it on this device.</p>
+          <>
+            {/* A link works once, in whichever browser opens it first. The code works anywhere. */}
+            <p>Check your email. Type the 6-digit code here, or open the link once.</p>
+            <input aria-label="Code" inputMode="numeric" autoComplete="one-time-code" maxLength={10} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, ""))} placeholder="123456" />
+            <button type="button" className="ink" disabled={code.length < 6} onClick={async () => {
+              const { error } = await supabase().auth.verifyOtp({ email: email.trim(), token: code, type: "email" });
+              if (error) setMsg("That code did not work. It may be used or out of date.");
+            }}>Sign in</button>
+            {msg && <p className="error">{msg}</p>}
+          </>
         ) : (
           <>
             <label htmlFor="email">Email</label>
