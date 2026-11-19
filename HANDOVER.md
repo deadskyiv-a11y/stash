@@ -102,6 +102,8 @@ in the repository, never echo it, never commit it.
 
 **Phone**
 - Two-row header, one sliding row of controls at the bottom, one-finger pan, two-finger pinch.
+- Paste and New note buttons replace Save in the header. Paste reads the clipboard (a picture
+  if there is one, else text). New note opens the same box Save opens on the laptop. Untried.
 - The spec says "No canvas on the phone". The canvas was built for the phone anyway and Kofi
   said the zoom works fine, so it stays unless he says otherwise.
 
@@ -160,8 +162,7 @@ account: no saves seen, no files seen, inserts and updates blocked.
    swipe pans). Kofi has not said whether he is happy with it.
 7. **Supabase advisor warning** on `public.is_owner()`. Intended. It returns only whether the
    caller is on the owner list.
-8. Spec items never built: a browser button for saving on the desktop, and "Paste" and
-   "New note" buttons on the phone screen.
+8. Spec item never built: a browser button for saving on the desktop.
 
 ## 8. How the code is laid out
 
