@@ -98,6 +98,26 @@ const OEMBED: [RegExp, string, string][] = [
   [/(^|\.)spotify\.com$/, "Spotify", "https://open.spotify.com/oembed?url="],
 ];
 
+/** Spotify's oEmbed names the album or song but not the artist. Its public embed page has the artist, year and tracks. */
+async function spotifyDetails(u: URL): Promise<{ artist: string; lines: string[] } | null> {
+  const m = /\/(album|track|playlist|episode|show)\/([A-Za-z0-9]+)/.exec(u.pathname);
+  if (!m) return null;
+  try {
+    const { body } = await safeFetch(`https://open.spotify.com/embed/${m[1]}/${m[2]}`, "text/html", 500_000);
+    const data = /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/.exec(body.toString("utf8"));
+    if (!data) return null;
+    const e = JSON.parse(data[1])?.props?.pageProps?.state?.data?.entity;
+    if (!e) return null;
+    const clean = (s: unknown) => (typeof s === "string" ? s.replace(/\u00a0/g, " ").trim() : "");
+    const artist = clean(e.subtitle) || (Array.isArray(e.artists) ? e.artists.map((a: { name?: string }) => clean(a?.name)).filter(Boolean).join(", ") : "");
+    const year = clean(e.releaseDate?.isoString).slice(0, 4);
+    const tracks: string[] = Array.isArray(e.trackList) ? e.trackList.slice(0, 30).map((t: { title?: string; subtitle?: string }) => [clean(t?.title), clean(t?.subtitle)].filter(Boolean).join(" by ")).filter(Boolean) : [];
+    return { artist, lines: [`Spotify ${m[1]}.`, year ? `Released ${year}.` : "", tracks.length ? `Tracks: ${tracks.join("; ")}` : ""].filter(Boolean) };
+  } catch {
+    return null;
+  }
+}
+
 async function fromOembed(input: string): Promise<Page | null> {
   const u = new URL(input);
   const hit = OEMBED.find(([re]) => re.test(u.hostname));
