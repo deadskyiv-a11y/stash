@@ -105,7 +105,8 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .ptile.chosen { outline: 3px solid var(--ink); outline-offset: 2px; }
 .pill-btn.small { min-height: 32px; padding: 0 12px; margin-left: 12px; font: 500 13px var(--sans); vertical-align: middle; }
 /* Map view: grey tiles, photo thumbnails as pins. */
-.pmap { position: absolute; inset: 0; }
+/* isolation keeps the map library's own high layers inside the map, so Stash's header and bottom bar stay on top of it. */
+.pmap { position: absolute; inset: 0; z-index: 0; isolation: isolate; }
 .pmap-view { position: absolute; inset: 0; background: var(--control); }
 .pmap-view .leaflet-tile-pane { filter: grayscale(1) contrast(0.95); }
 /* The map library blends tile edges by adding their light, which shows as white seams once the tiles are filtered to grey. */
