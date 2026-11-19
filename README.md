@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Stash
 
-## Getting Started
+A private place to save links, images and notes. It reads each save, files it
+into a cluster on an infinite white canvas, and finds things by meaning.
 
-First, run the development server:
+Working name. Change `NEXT_PUBLIC_APP_NAME` to rename the app.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+## Parts
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+| Part | Where |
+| --- | --- |
+| App (Next.js) | `app/`, `components/`, `lib/` |
+| Database schema | `supabase/migrations/0001_init.sql` |
+| Meaning "fingerprint" function | `supabase/functions/embed/` |
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Setup
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+1. Create a Supabase project and run the migration in `supabase/migrations`.
+2. Add the owner's email: `insert into private.allowed_emails values ('you@example.com');`
+3. Deploy the `embed` edge function.
+4. In Supabase, under Authentication, set the Site URL to the live web address.
+5. Set the variables listed in `.env.example` in Vercel.
 
-## Learn More
+## What phase 1 covers
 
-To learn more about Next.js, take a look at the following resources:
+- Save by paste, drag and drop, or the Save button (links, images, notes).
+- Each save is read: page preview image, title, summary, tags, cluster, key facts.
+- Canvas with clusters, drag to move, scroll or pinch to zoom, glide to matches.
+- List view, type filters, last 30 days.
+- Search by meaning and by exact words.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Not yet built: sub-group splitting and merging, pinning, the Inbox arrival
+animation, the iPhone share sheet, written answers, drawing only what is on screen.
