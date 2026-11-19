@@ -54,6 +54,11 @@ export function Photos() {
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [toast, setToast] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  // Select mode: tap photos to pick several, then set a detail on all of them at once.
+  const [selecting, setSelecting] = useState(false);
+  const [chosen, setChosen] = useState<Set<string>>(new Set());
+  const last = useRef<string | null>(null);
+  const [round, setRound] = useState(0); // bumps after each set-on-all, to empty the boxes
   const file = useRef<HTMLInputElement>(null);
   const signed = useRef(new Set<string>());
   const router = useRouter();
@@ -167,11 +172,42 @@ export function Photos() {
 
   const opened = open ? photos.find((p) => p.id === open) || null : null;
 
+  const order = useMemo(() => groups.flatMap(([, list]) => list.map((p) => p.id)), [groups]);
+  const pick = (id: string, range: boolean) => {
+    setChosen((old) => {
+      const next = new Set(old);
+      const a = last.current ? order.indexOf(last.current) : -1, b = order.indexOf(id);
+      // Shift-click picks everything between the last photo clicked and this one.
+      if (range && a >= 0 && b >= 0) for (const x of order.slice(Math.min(a, b), Math.max(a, b) + 1)) next.add(x);
+      else if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+    last.current = id;
+  };
+  const pickGroup = (ids: string[]) => setChosen((old) => {
+    const next = new Set(old);
+    const all = ids.every((id) => next.has(id));
+    for (const id of ids) { if (all) next.delete(id); else next.add(id); }
+    return next;
+  });
+  const stopSelecting = () => { setSelecting(false); setChosen(new Set()); last.current = null; };
+
   // Kofi's own entries, for what the file does not say: a place, or the camera and film behind a scan.
   const edit = async (p: Photo, patch: Partial<Photo>) => {
     const { error } = await supabase().from("photos").update(patch).eq("id", p.id);
     if (error) { say("Could not save that. " + error.message); return; }
     setPhotos((all) => all.map((x) => (x.id === p.id ? { ...x, ...patch } : x)));
+  };
+  const editMany = async (patch: Partial<Photo>) => {
+    const ids = [...chosen];
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase().from("photos").update(patch).in("id", ids.slice(i, i + 200));
+      if (error) { say("Could not save that. " + error.message); return; }
+    }
+    setPhotos((all) => all.map((x) => (chosen.has(x.id) ? { ...x, ...patch } : x)));
+    setRound((r) => r + 1);
+    say(`Set on ${ids.length} ${ids.length === 1 ? "photo" : "photos"}.`);
   };
   const day = (iso: string | null) => { if (!iso) return ""; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
@@ -185,16 +221,19 @@ export function Photos() {
 
   return (
     <main className="app">
-      <div className="list photos">
+      <div className={"list photos" + (selecting || opened ? " with-panel" : "")}>
         {groups.map(([name, list]) => (
           <section key={name} className="pgroup">
-            <h2 className="label cluster static">{name} <span>{list.length}</span></h2>
+            <h2 className="label cluster static">{name} <span>{list.length}</span>
+              {selecting && <button type="button" className="pill-btn small" onClick={() => pickGroup(list.map((p) => p.id))}>{list.every((p) => chosen.has(p.id)) ? "Clear these" : "Select these"}</button>}
+            </h2>
             <div className="pgrid">
               {list.map((p) => {
                 const url = p.thumb_path ? urls[p.thumb_path] : undefined;
                 const w = p.w && p.h ? Math.round((180 * p.w) / p.h) : 180;
                 return (
-                  <button key={p.id} type="button" className="ptile" style={{ width: w }} onClick={() => { setConfirmDelete(false); setOpen(p.id); }} aria-label={p.name}>
+                  <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "")} style={{ width: w }} aria-label={p.name} aria-pressed={selecting ? chosen.has(p.id) : undefined}
+                    onClick={(e) => { if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setOpen(p.id); } }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {url ? <img src={url} alt="" loading="lazy" decoding="async" /> : <span className="tile-text muted">{p.thumb_path ? "" : p.name}</span>}
                   </button>
@@ -251,6 +290,9 @@ export function Photos() {
           <button type="button" className={group === "date" ? "on" : ""} onClick={() => setGroup("date")}>Date</button>
           <button type="button" className={group === "place" ? "on" : ""} onClick={() => setGroup("place")}>Place</button>
         </div>
+        <div className="bar">
+          <button type="button" className={selecting ? "on" : ""} onClick={() => { if (selecting) stopSelecting(); else { setOpen(null); setSelecting(true); } }}>{selecting ? "Done selecting" : "Select"}</button>
+        </div>
       </footer>
 
       {opened && (
@@ -292,6 +334,33 @@ export function Photos() {
             ? <button type="button" className="ink" onClick={() => remove(opened)}>Confirm remove</button>
             : <button type="button" className="pill-btn" onClick={() => setConfirmDelete(true)}>Remove from Stash</button>}
           <p className="meta">Removing takes the photo out of Stash only. The original stays in your Drive.</p>
+        </aside>
+      )}
+
+      {selecting && (
+        <aside className="detail sheet" aria-label="Selected photos">
+          <button type="button" className="pill-btn close" onClick={stopSelecting}>Done</button>
+          <h2>{chosen.size} {chosen.size === 1 ? "photo" : "photos"} selected</h2>
+          {chosen.size === 0 ? (
+            <p className="meta">Tap photos to select them. Hold Shift and click to select a run. Use Select these, beside a heading, for a whole group.</p>
+          ) : (
+            <>
+              <p className="meta">Whatever you enter here is set on all of them. Boxes you leave empty change nothing.</p>
+              <dl>
+                <div>
+                  <dt>Place</dt>
+                  <dd className="grow">
+                    <PlaceInput key={"many" + round} className="inline" value="" placeholder="Set a place"
+                      onText={(v) => { if (v) editMany({ place: v }); }} onPick={(s) => editMany({ place: s.label, lat: s.lat, lng: s.lng })} />
+                  </dd>
+                </div>
+                <Field key={"mc" + round} label="Camera" value="" placeholder="Set a camera" onSave={(v) => { if (v) editMany({ camera: v }); }} />
+                <Field key={"ml" + round} label="Lens" value="" placeholder="Set a lens" onSave={(v) => { if (v) editMany({ lens: v }); }} />
+                <Field key={"mf" + round} label="Film" value="" placeholder="Set a film stock" onSave={(v) => { if (v) editMany({ film: v }); }} />
+              </dl>
+              <button type="button" className="pill-btn" onClick={() => setChosen(new Set())}>Clear selection</button>
+            </>
+          )}
         </aside>
       )}
 

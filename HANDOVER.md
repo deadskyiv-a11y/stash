@@ -164,6 +164,9 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   in `public.photos`: date taken, GPS, typed place, camera, lens, settings, Lightroom rating and
   keywords, and the Drive link and folder. `lib/photo-read.ts` reads these with `exifr`.
 - A batch can be given one typed place, for cameras with no GPS.
+- **Select** (bottom bar) lets him pick several photos: tap, Shift-click for a run, or "Select
+  these" beside a group heading. A panel then sets Place, Camera, Lens or Film on all of them.
+  On the phone that panel is a sheet across the bottom. Untried.
 - **Places are real map positions.** The place box offers real places as he types (Photon, a free
   OpenStreetMap lookup, called from the browser: `lib/places.ts`). Picking one stores its
   position. The panel shows a small grey map with a pin; clicking the map moves the pin. A photo
