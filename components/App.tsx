@@ -8,6 +8,9 @@ import { pdfCover } from "@/lib/pdf-cover";
 import { clusterOf, computeLayout, isQuote, samePage, type Label } from "@/lib/layout";
 import { Canvas, type CanvasHandle } from "./Canvas";
 import { Logo } from "./Logo";
+import { Photos } from "./Photos";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const NAME = process.env.NEXT_PUBLIC_APP_NAME || "Stash";
 type TypeFilter = "all" | Kind;
@@ -87,7 +90,7 @@ function SignIn() {
   );
 }
 
-export default function App() {
+export default function App({ room = "stash" }: { room?: "stash" | "photos" }) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   useEffect(() => {
     supabase().auth.getSession().then(({ data }) => setSession(data.session));
@@ -96,10 +99,11 @@ export default function App() {
   }, []);
   if (session === undefined) return null;
   if (!session) return <SignIn />;
-  return <Library />;
+  return room === "photos" ? <Photos /> : <Library />;
 }
 
 function Library() {
+  const router = useRouter();
   const [saves, setSaves] = useState<Save[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [urls, setUrls] = useState<Record<string, string>>({});
@@ -339,6 +343,8 @@ function Library() {
       if (text) { e.preventDefault(); addText(text); }
     };
     const onKey = (e: KeyboardEvent) => {
+      // Option+P switches between Stash and the photo room.
+      if (e.altKey && e.code === "KeyP") { e.preventDefault(); router.push("/photos"); }
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); box.current?.focus(); box.current?.select(); }
       if (e.key === "Escape") { setOpen(null); setAdding(false); setMenu(false); setReply(null); if (document.activeElement === box.current) { setQ(""); setPick(null); } }
     };
@@ -360,7 +366,7 @@ function Library() {
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("drop", onDrop);
     };
-  }, [addFiles, addText, pictureFor, givePicture]);
+  }, [addFiles, addText, pictureFor, givePicture, router]);
 
   const remove = async (s: Save) => {
     const { error } = await supabase().from("saves").delete().eq("id", s.id);
@@ -451,6 +457,8 @@ function Library() {
       <header className="top">
         <div className="brand">
           <button type="button" className="plain" onClick={() => setMenu((m) => !m)} aria-expanded={menu} aria-label={NAME + " menu"}><Logo height={24} title={NAME} /></button>
+          <Link className="pill-btn link desk" href="/photos">Photos</Link>
+          {menu && <Link className="pill-btn link phone-only" href="/photos">Photos</Link>}
           {menu && <button type="button" className="pill-btn" onClick={() => supabase().auth.signOut()}>Sign out</button>}
           {/* The browser button: dragged to the bookmarks bar, it sends the page being viewed, and its picture, to Stash. */}
           {menu && (

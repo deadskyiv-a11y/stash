@@ -91,6 +91,19 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .adder-actions { display: flex; justify-content: space-between; gap: 8px; }
 .adder .pill-btn { background: var(--ground); }
 
+/* Photo room: a plain grid of selects, grouped under a name, pictures uncropped at one row height. */
+.pill-btn.link { display: inline-flex; align-items: center; text-decoration: none; color: inherit; }
+.pill-btn.link.on { background: var(--ink); color: #fff; }
+.phone-only { display: none !important; }
+.list.photos { padding-top: 96px; }
+.pgroup { max-width: 1400px; margin: 0 auto 56px; content-visibility: auto; contain-intrinsic-size: auto 600px; }
+.label.static { position: static; transform: none; margin: 0 0 14px; font-size: 19px; }
+.pgrid { display: flex; flex-wrap: wrap; gap: 12px; }
+.ptile { height: 180px; border-radius: 2px; overflow: hidden; background: var(--control); flex: none; }
+.ptile img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.field { min-height: 44px; padding: 0 16px; border-radius: 999px; border: none; outline: none; background: var(--ground); width: 100%; }
+.adder-actions { align-items: center; }
+
 /* Written answer, under the command box */
 .answer { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); width: min(560px, calc(100vw - 56px)); padding: 16px; border-radius: 20px; background: var(--control); display: flex; flex-direction: column; align-items: flex-start; gap: 8px; z-index: 4; }
 .answer p { margin: 0 0 4px; }
@@ -158,6 +171,11 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   .save { display: none; } /* the phone gets Paste and New note instead */
   .phone { display: block; }
   .bookmarklet { display: none; }
+  .desk { display: none !important; }
+  .phone-only { display: inline-flex !important; }
+  .save.always { display: block; }
+  .ptile { height: 120px; }
+  .ptile[style] { max-width: 100%; }
   .top .pill-btn.phone { margin-left: auto; }
   .adder { right: 16px; top: 128px; width: calc(100vw - 32px); }
   .answer { top: 128px; width: calc(100vw - 32px); }
