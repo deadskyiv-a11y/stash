@@ -52,7 +52,8 @@ export function Photos() {
   // Each project's photographs in the order Kofi has put them, first to last.
   const [orders, setOrders] = useState<Record<string, string[]>>({});
   const [dragging, setDragging] = useState<string | null>(null);
-  const [over, setOver] = useState<string | null>(null);
+  const [over, setOver] = useState<{ id: string; after: boolean } | null>(null);
+  const dragged = useRef(false); // true just after a drag, so the click that ends it does not open the photo
   const [only, setOnly] = useState(""); // show just this project
   const [view, setView] = useState<"grid" | "map">("grid");
   const [inArchive, setInArchive] = useState(false); // looking at archived photos instead of live ones
@@ -372,6 +373,45 @@ export function Photos() {
     const { error } = await supabase().from("project_orders").upsert({ project: only, ids, updated_at: new Date().toISOString() }, { onConflict: "user_id,project" });
     if (error) say("Could not save the order. " + error.message);
   };
+  // Dragging to reorder, done with the pointer alone. The browser's own drag-and-drop is avoided on purpose:
+  // it hands the picture to the operating system, which wakes any drag-shelf app the moment a photo is picked up.
+  const startMove = (id: string, x0: number, y0: number) => {
+    let moving = false;
+    let target: { id: string; after: boolean } | null = null;
+    const move = (e: PointerEvent) => {
+      if (!moving && Math.abs(e.clientX - x0) + Math.abs(e.clientY - y0) < 6) return;
+      if (!moving) { moving = true; setDragging(id); }
+      const el = (document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null)?.closest<HTMLElement>("[data-pid]");
+      const pid = el?.dataset.pid;
+      if (el && pid && pid !== id) {
+        const r = el.getBoundingClientRect();
+        target = { id: pid, after: e.clientX > r.left + r.width / 2 };
+      } else target = null;
+      setOver(target);
+      // Near the top or bottom edge, scroll the page along.
+      const list = document.querySelector<HTMLElement>(".list.photos");
+      if (list) { if (e.clientY < 140) list.scrollBy(0, -18); else if (e.clientY > window.innerHeight - 120) list.scrollBy(0, 18); }
+    };
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", up);
+      setDragging(null);
+      setOver(null);
+      if (!moving) return;
+      dragged.current = true;
+      window.setTimeout(() => { dragged.current = false; }, 0);
+      if (!target) return;
+      // Dropped on the right half of a photo: place it after that one, which is just before the next.
+      const ids = sequenceOf(only).filter((v) => v !== id);
+      const i = ids.indexOf(target.id);
+      reorder(id, target.after ? ids[i + 1] ?? null : target.id);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+  };
+
   // One place earlier or later, for the phone and the keyboard, where dragging is awkward.
   const nudge = (id: string, by: number) => {
     const ids = sequenceOf(only), i = ids.indexOf(id), j = i + by;
@@ -428,15 +468,12 @@ export function Photos() {
                 const url = p.thumb_path ? urls[p.thumb_path] : undefined;
                 const w = p.w && p.h ? Math.round((180 * p.w) / p.h) : 180;
                 return (
-                  <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "") + (ordering && over === p.id && dragging !== p.id ? " drop-here" : "") + (dragging === p.id ? " lifting" : "")} style={{ width: w }}
-                    draggable={ordering && !selecting}
-                    onDragStart={(e) => { setDragging(p.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); }}
-                    onDragOver={(e) => { if (dragging) { e.preventDefault(); if (over !== p.id) setOver(p.id); } }}
-                    onDrop={(e) => { if (dragging) { e.preventDefault(); e.stopPropagation(); reorder(dragging, p.id); setDragging(null); setOver(null); } }}
-                    onDragEnd={() => { setDragging(null); setOver(null); }} aria-label={p.name} aria-pressed={selecting ? chosen.has(p.id) : undefined}
-                    onClick={(e) => { if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setInfo(false); setOpen(p.id); setBig(true); } }}>
+                  <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "") + (ordering && !selecting ? " movable" : "") + (over?.id === p.id && dragging !== p.id ? (over.after ? " drop-after" : " drop-here") : "") + (dragging === p.id ? " lifting" : "")} style={{ width: w }}
+                    data-pid={p.id} draggable={false}
+                    onPointerDown={(e) => { if (ordering && !selecting && e.pointerType !== "touch" && e.button === 0) startMove(p.id, e.clientX, e.clientY); }} aria-label={p.name} aria-pressed={selecting ? chosen.has(p.id) : undefined}
+                    onClick={(e) => { if (dragged.current) { dragged.current = false; return; } if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setInfo(false); setOpen(p.id); setBig(true); } }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    {url ? <img src={url} alt="" loading="lazy" decoding="async" /> : <span className="tile-text muted">{p.thumb_path ? "" : p.name}</span>}
+                    {url ? <img src={url} alt="" loading="lazy" decoding="async" draggable={false} /> : <span className="tile-text muted">{p.thumb_path ? "" : p.name}</span>}
                     {p.rating ? <span className="stars" aria-label={`${p.rating} stars`}>{p.rating}★</span> : null}
                     {ordering && <span className="seq">{sequenceOf(only).indexOf(p.id) + 1}</span>}
                   </button>

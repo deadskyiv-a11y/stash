@@ -216,8 +216,10 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   what makes deep zoom sharp. Zoom, drag and rating keys tested on this Mac with a sample
   picture; Kofi confirmed the view opens. Two earlier versions shipped untested and had bugs.
 - **Order within a project.** With a project picked in the bottom bar, an "Order" button shows
-  that project's photos numbered in sequence. Drag one onto another to place it just before
-  (HTML drag and drop, desktop only). "Move earlier" and "Move later" in a photo's panel do the
+  that project's photos numbered in sequence. Drag one onto another: the left half places it before,
+  the right half after. The drag is done with pointer events, not the browser's drag and drop,
+  because Kofi runs a drag-shelf app that pops up whenever the operating system sees a drag.
+  Mouse only; a touch scrolls the page as usual. "Move earlier" and "Move later" in a photo's panel do the
   same one step at a time, for the phone. The order is one row per project in
   `public.project_orders` (a list of photo ids); photos not yet placed follow, oldest first.
   The large view steps through in that order. Untried: drag and drop could not be driven from
