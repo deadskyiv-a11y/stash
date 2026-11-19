@@ -31,8 +31,10 @@ function looksLikeUrl(t: string): string | null {
 
 function SignIn() {
   const [email, setEmail] = useState("");
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">("idle");
-  const [msg, setMsg] = useState("");
+  // A used or expired email link comes back as #error_description=... ; show it rather than a silent form.
+  const [linkError] = useState(() => new URLSearchParams(window.location.hash.slice(1)).get("error_description"));
+  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">(linkError ? "error" : "idle");
+  const [msg, setMsg] = useState(linkError ? linkError + ". Send a new one." : "");
   return (
     <main className="signin">
       <form

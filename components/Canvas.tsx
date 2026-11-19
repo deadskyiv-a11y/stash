@@ -104,12 +104,13 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
       x1 = Math.max(x1, t.x + t.w); y1 = Math.max(y1, t.y + t.h);
     }
     if (!isFinite(x0)) return { x: r.clientWidth / 2, y: r.clientHeight / 2, s: 1 };
-    const top = 150, bottom = 110;
-    const availW = Math.max(200, r.clientWidth - 160);
+    // ponytail: labels keep screen size, so reserve a fixed strip on the right for a name wider than its tiles.
+    const top = 150, bottom = 110, labelRoom = 160;
+    const availW = Math.max(200, r.clientWidth - 160 - labelRoom);
     const availH = Math.max(200, r.clientHeight - top - bottom);
     const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
     const s = Math.max(MIN, Math.min(availW / bw, availH / bh, some ? 2.2 : 1));
-    return { x: r.clientWidth / 2 - (x0 + bw / 2) * s, y: top + availH / 2 - (y0 + bh / 2) * s, s };
+    return { x: (r.clientWidth - labelRoom) / 2 - (x0 + bw / 2) * s, y: top + availH / 2 - (y0 + bh / 2) * s, s };
   }, [hits, layout]);
 
   // Fly to the matches whenever the search, filters or the set of saves change.
