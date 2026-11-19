@@ -106,6 +106,7 @@ function Library() {
   const [zoom, setZoom] = useState(100);
   const [menu, setMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [reply, setReply] = useState<{ q: string; text: string; sources: string[] } | null>(null);
   const [moving, setMoving] = useState<{ id: string; to: string } | null>(null);
   const canvas = useRef<CanvasHandle>(null);
   const box = useRef<HTMLInputElement>(null);
@@ -268,7 +269,7 @@ function Library() {
     };
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); box.current?.focus(); box.current?.select(); }
-      if (e.key === "Escape") { setOpen(null); setAdding(false); setMenu(false); if (document.activeElement === box.current) { setQ(""); setPick(null); } }
+      if (e.key === "Escape") { setOpen(null); setAdding(false); setMenu(false); setReply(null); if (document.activeElement === box.current) { setQ(""); setPick(null); } }
     };
     const onDragOver = (e: DragEvent) => e.preventDefault();
     const onDrop = (e: DragEvent) => {
@@ -317,6 +318,21 @@ function Library() {
       say(e instanceof Error ? e.message : "Could not tidy");
     }
     setTidying(false);
+  };
+
+  // A question typed in the box gets a written answer on Enter, with the saves it came from.
+  const ask = async () => {
+    const term = q.trim();
+    if (!/\?$|^(who|what|when|where|which|why|how|did|do|does|is|are|was|were|can|have|has)\b/i.test(term)) return;
+    setReply({ q: term, text: "", sources: [] });
+    try {
+      const r = await api<{ answer: string; sources: string[] }>("/api/answer", { q: term });
+      setReply((cur) => (cur && cur.q === term ? { q: term, text: r.answer, sources: r.sources } : cur));
+      // Fly the canvas to the saves the answer rests on.
+      if (r.sources.length) setFound({ q: term, ids: new Set(r.sources) });
+    } catch (e) {
+      setReply((cur) => (cur && cur.q === term ? { q: term, text: e instanceof Error ? e.message : "Could not answer just now.", sources: [] } : cur));
+    }
   };
 
   const reset = () => { setQ(""); setType("all"); setRecent(false); setPick(null); canvas.current?.refit(); };
@@ -368,11 +384,21 @@ function Library() {
         <div className="command">
           <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <label htmlFor="q" className="sr">Search your saves</label>
-          <input id="q" ref={box} type="text" value={q} onChange={(e) => { setQ(e.target.value); setPick(null); }} placeholder="Search your saves" autoComplete="off" spellCheck={false} />
+          <input id="q" ref={box} type="text" value={q} onChange={(e) => { setQ(e.target.value); setPick(null); setReply(null); }} onKeyDown={(e) => { if (e.key === "Enter") ask(); }} placeholder="Search, or ask a question" autoComplete="off" spellCheck={false} />
           <span className="count">{status}</span>
         </div>
         <button type="button" className="ink save" onClick={() => setAdding((a) => !a)}>Save</button>
       </header>
+
+      {reply && (
+        <section className="answer" aria-live="polite" aria-label="Answer">
+          <p className={reply.text ? "" : "muted"}>{reply.text || "Reading your saves"}</p>
+          {reply.sources.map((id) => {
+            const s = saves.find((x) => x.id === id);
+            return s ? <button key={id} type="button" className="pill-btn" onClick={() => { setConfirmDelete(false); setOpen(id); }}>{s.title || s.site || "Untitled"}</button> : null;
+          })}
+        </section>
+      )}
 
       {adding && (
         <form className="adder" onSubmit={(e) => { e.preventDefault(); addText(draft); setDraft(""); setAdding(false); }}>
