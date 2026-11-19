@@ -117,7 +117,8 @@ in the repository, never echo it, never commit it.
 - Transcription is OpenAI (`lib/transcribe.ts`, key `OPENAI_API_KEY`, model
   `gpt-4o-mini-transcribe` unless `OPENAI_TRANSCRIBE_MODEL` says otherwise). With no key or a
   failed call, the recording is still kept and plays, with no text, filed under Unsorted.
-- Untried. Accuracy on Kofi's voice and on Twi or Ga words is unknown.
+- Kofi recorded one note and says it transcribed and filed. He deleted it before it could be
+  checked in the database. Accuracy on Twi or Ga words is still unknown.
 
 **How kinds look different** (Kofi asked for this on 19 November 2026; it bends the spec's
 "no captions on the canvas" rule for articles only)
