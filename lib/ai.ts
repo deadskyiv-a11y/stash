@@ -181,3 +181,44 @@ export async function answer(
     return null;
   }
 }
+
+const PHOTO = `You catalogue photographs for a photographer choosing pictures for a photo book. Look at the photograph and reply with ONE JSON object and nothing else:
+{"subject": string, "tags": string[], "caption": string}
+
+Rules:
+- subject: the kind of photograph, 1 or 2 words, Title Case, such as Portrait, Street, Landscape, Architecture, Food, Event, Still Life, Nature, Interior or Travel. REUSE one of the existing subjects when it fits. Create a new one only when none fits.
+- tags: 6 to 10 lowercase tags of one or two words. Cover what is in the frame, the setting, the dominant colours, the light and the mood. Use plain words a person would type when searching.
+- caption: one sentence describing the photograph so it can be found by description later.
+- Describe people by what is visible, such as clothing, action and expression. Never name anyone and never guess who someone is.
+- Never invent details that are not visible.`;
+
+/** Reads one photograph's thumbnail. Returns the tokens used as well, so the cost per photo can be measured. */
+export async function tagPhoto(image: Buffer, subjects: string[], place: string | null): Promise<{ subject: string; tags: string[]; caption: string; usage: { in: number; out: number } } | null> {
+  if (!aiEnabled()) return null;
+  try {
+    const msg = await new Anthropic().messages.create({
+      model: MODEL,
+      max_tokens: 400,
+      system: PHOTO,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image.toString("base64") } },
+          { type: "text", text: `Existing subjects: ${subjects.join(", ") || "(none yet)"}${place ? `\nTaken at: ${place}` : ""}` },
+        ],
+      }],
+    });
+    const text = msg.content.map((b) => (b.type === "text" ? b.text : "")).join("");
+    const j = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+    const str = (v: unknown, max: number) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+    return {
+      subject: str(j.subject, 30) || "Other",
+      tags: Array.isArray(j.tags) ? [...new Set<string>(j.tags.map((t: unknown) => str(t, 30).toLowerCase()).filter(Boolean))].slice(0, 10) : [],
+      caption: str(j.caption, 300),
+      usage: { in: msg.usage.input_tokens, out: msg.usage.output_tokens },
+    };
+  } catch (e) {
+    console.error("Photo tagging failed", e);
+    return null;
+  }
+}

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase-browser";
+import { api, supabase } from "@/lib/supabase-browser";
 import { connectDrive, driveConfigured, driveConnected, ensureFolder, uploadToDrive } from "@/lib/drive";
 import { readPhoto } from "@/lib/photo-read";
 import { nameOf } from "@/lib/places";
@@ -17,8 +17,9 @@ type Photo = {
   id: string; name: string; bytes: number | null; drive_id: string | null; drive_link: string | null; drive_folder: string | null;
   thumb_path: string | null; w: number | null; h: number | null; taken_at: string | null; lat: number | null; lng: number | null;
   place: string | null; camera: string | null; lens: string | null; film: string | null; settings: string | null; rating: number | null; keywords: string[]; created_at: string;
+  tags: string[]; caption: string | null; subject: string | null; tagged: boolean;
 };
-const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at";
+const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at,tags,caption,subject,tagged";
 
 const dateOf = (p: Photo) => new Date(p.taken_at || p.created_at);
 const month = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
@@ -45,7 +46,11 @@ export function Photos() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const [group, setGroup] = useState<"date" | "place">("date");
+  const [group, setGroup] = useState<"date" | "place" | "subject">("date");
+  const [q, setQ] = useState("");
+  const [stars, setStars] = useState(0); // show only photos rated at least this
+  const [reading, setReading] = useState(0); // photos the AI still has to look at
+  const queued = useRef(new Set<string>());
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [place, setPlace] = useState("");
@@ -90,6 +95,28 @@ export function Photos() {
       for (let i = 0; i < need.length; i += 100) {
         const { data } = await supabase().storage.from("saves").createSignedUrls(need.slice(i, i + 100), 60 * 60 * 12);
         if (data) setUrls((u) => ({ ...u, ...Object.fromEntries(data.filter((d) => d.signedUrl && d.path).map((d) => [d.path as string, d.signedUrl as string])) }));
+      }
+    })();
+  }, [photos]);
+
+  // The AI looks at each new thumbnail, one at a time, and writes its subject, tags and a description.
+  useEffect(() => {
+    const todo = photos.filter((p) => !p.tagged && p.thumb_path && !queued.current.has(p.id));
+    if (todo.length === 0) return;
+    todo.forEach((p) => queued.current.add(p.id));
+    queueMicrotask(() => setReading((n) => n + todo.length));
+    (async () => {
+      let failures = 0;
+      for (const p of todo) {
+        // After three failures in a row the AI is taken to be unavailable; the rest are tried again on the next visit.
+        if (failures < 3) {
+          try {
+            const r = await api<{ photo: Pick<Photo, "id" | "tags" | "caption" | "subject" | "tagged"> }>("/api/photos/tag", { id: p.id });
+            setPhotos((all) => all.map((x) => (x.id === p.id ? { ...x, ...r.photo } : x)));
+            failures = 0;
+          } catch { failures++; }
+        }
+        setReading((n) => n - 1);
       }
     })();
   }, [photos]);
@@ -159,16 +186,24 @@ export function Photos() {
   }, [deposit, router]);
 
   const groups = useMemo(() => {
+    const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     const sorted = [...photos].sort((a, b) => dateOf(b).getTime() - dateOf(a).getTime());
     const map = new Map<string, Photo[]>();
     for (const p of sorted) {
-      const k = group === "date" ? month(dateOf(p)) : p.place || "No place given";
+      if (stars && (p.rating || 0) < stars) continue;
+      if (words.length) {
+        // Every word typed must appear somewhere in what is known about the photo.
+        const hay = [p.name, p.place, p.subject, p.caption, p.camera, p.lens, p.film, p.settings, month(dateOf(p)), p.tags.join(" "), p.keywords.join(" "), p.rating ? `${p.rating} stars` : ""].join(" ").toLowerCase();
+        if (!words.every((w) => hay.includes(w))) continue;
+      }
+      const k = group === "date" ? month(dateOf(p)) : group === "place" ? p.place || "No place given" : p.subject || (p.tagged ? "Other" : "Not read yet");
       if (!map.has(k)) map.set(k, []);
       map.get(k)!.push(p);
     }
     const out = [...map.entries()];
-    return group === "place" ? out.sort((a, b) => b[1].length - a[1].length) : out;
-  }, [photos, group]);
+    return group === "date" ? out : out.sort((a, b) => b[1].length - a[1].length);
+  }, [photos, group, q, stars]);
+  const showing = groups.reduce((n, [, list]) => n + list.length, 0);
 
   const opened = open ? photos.find((p) => p.id === open) || null : null;
 
@@ -236,6 +271,7 @@ export function Photos() {
                     onClick={(e) => { if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setOpen(p.id); } }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {url ? <img src={url} alt="" loading="lazy" decoding="async" /> : <span className="tile-text muted">{p.thumb_path ? "" : p.name}</span>}
+                    {p.rating ? <span className="stars" aria-label={`${p.rating} stars`}>{p.rating}★</span> : null}
                   </button>
                 );
               })}
@@ -257,7 +293,12 @@ export function Photos() {
           <Link className="pill-btn link" href="/">Stash</Link>
           <span className="pill-btn link on">Photos</span>
         </div>
-        <span className="count">{busy ? `Uploading ${Math.min(busy.done + 1, busy.total)} of ${busy.total}` : loaded ? `${photos.length} ${photos.length === 1 ? "photo" : "photos"}` : ""}</span>
+        <div className="command">
+          <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
+          <label htmlFor="pq" className="sr">Search your photos</label>
+          <input id="pq" type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your photos" autoComplete="off" spellCheck={false} />
+          <span className="count">{busy ? `Uploading ${Math.min(busy.done + 1, busy.total)} of ${busy.total}` : reading > 0 ? `Reading ${reading}` : !loaded ? "" : showing === photos.length ? `${photos.length} ${photos.length === 1 ? "photo" : "photos"}` : showing === 0 ? "No match" : `${showing} of ${photos.length}`}</span>
+        </div>
         <button type="button" className="ink save always" disabled={!!busy} onClick={() => setAdding((a) => !a)}>Add photos</button>
       </header>
 
@@ -289,6 +330,12 @@ export function Photos() {
         <div className="bar">
           <button type="button" className={group === "date" ? "on" : ""} onClick={() => setGroup("date")}>Date</button>
           <button type="button" className={group === "place" ? "on" : ""} onClick={() => setGroup("place")}>Place</button>
+          <button type="button" className={group === "subject" ? "on" : ""} onClick={() => setGroup("subject")}>Subject</button>
+        </div>
+        <div className="bar">
+          {[0, 3, 4, 5].map((n) => (
+            <button key={n} type="button" className={stars === n ? "on" : ""} onClick={() => setStars(n)}>{n === 0 ? "Any rating" : n === 5 ? "5★" : `${n}★ and up`}</button>
+          ))}
         </div>
         <div className="bar">
           <button type="button" className={selecting ? "on" : ""} onClick={() => { if (selecting) stopSelecting(); else { setOpen(null); setSelecting(true); } }}>{selecting ? "Done selecting" : "Select"}</button>
@@ -302,7 +349,15 @@ export function Photos() {
           {opened.thumb_path && urls[opened.thumb_path] && <img src={urls[opened.thumb_path]} alt={opened.name} />}
           <h2>{opened.name}</h2>
           {opened.drive_link && <a className="pill-btn link" href={opened.drive_link} target="_blank" rel="noreferrer">Open the original in Drive</a>}
+          {opened.caption && <p>{opened.caption}</p>}
+          {/* Stars: click one to rate, click the same one again to clear. */}
+          <div className="rate" role="group" aria-label="Rating">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} type="button" className={(opened.rating || 0) >= n ? "on" : ""} aria-label={`${n} ${n === 1 ? "star" : "stars"}`} onClick={() => edit(opened, { rating: opened.rating === n ? null : n })}>★</button>
+            ))}
+          </div>
           <dl>
+            <Field key={opened.id + "s" + (opened.subject || "")} label="Subject" value={opened.subject || ""} placeholder={opened.tagged ? "Add a subject" : "Not read yet"} onSave={(v) => edit(opened, { subject: v || null })} />
             <Field key={opened.id + "d"} label="Taken" type="date" value={day(opened.taken_at)} placeholder="Add a date" onSave={(v) => {
               // Keep the time of day the camera recorded; a typed date with no time sits at midday.
               const old = opened.taken_at ? new Date(opened.taken_at) : null;
@@ -322,13 +377,13 @@ export function Photos() {
             <Field key={opened.id + "l"} label="Lens" value={opened.lens || ""} placeholder="Add a lens" onSave={(v) => edit(opened, { lens: v || null })} />
             <Field key={opened.id + "f"} label="Film" value={opened.film || ""} placeholder="Add a film stock" onSave={(v) => edit(opened, { film: v || null })} />
             {opened.settings && <div><dt>Settings</dt><dd>{opened.settings}</dd></div>}
-            {opened.rating !== null && <div><dt>Rating</dt><dd>{opened.rating} of 5</dd></div>}
             {opened.drive_folder && <div><dt>In Drive</dt><dd>{opened.drive_folder}</dd></div>}
           </dl>
           <PinMap key={opened.id + String(opened.lat) + String(opened.lng)} lat={opened.lat} lng={opened.lng} onPick={async (lat, lng) => {
             // A pin dropped on a photo with no place name fills the name in from the map.
             await edit(opened, { lat, lng, ...(opened.place ? {} : { place: await nameOf(lat, lng) }) });
           }} />
+          {opened.tags.length > 0 && <div className="tags">{opened.tags.map((t) => <button key={t} type="button" className="pill-btn" onClick={() => { setQ(t); setOpen(null); }}>{t}</button>)}</div>}
           {opened.keywords.length > 0 && <div className="tags">{opened.keywords.map((k) => <span key={k} className="pill-btn link">{k}</span>)}</div>}
           {confirmDelete
             ? <button type="button" className="ink" onClick={() => remove(opened)}>Confirm remove</button>
@@ -357,6 +412,7 @@ export function Photos() {
                 <Field key={"mc" + round} label="Camera" value="" placeholder="Set a camera" onSave={(v) => { if (v) editMany({ camera: v }); }} />
                 <Field key={"ml" + round} label="Lens" value="" placeholder="Set a lens" onSave={(v) => { if (v) editMany({ lens: v }); }} />
                 <Field key={"mf" + round} label="Film" value="" placeholder="Set a film stock" onSave={(v) => { if (v) editMany({ film: v }); }} />
+                <Field key={"ms" + round} label="Subject" value="" placeholder="Set a subject" onSave={(v) => { if (v) editMany({ subject: v }); }} />
               </dl>
               <button type="button" className="pill-btn" onClick={() => setChosen(new Set())}>Clear selection</button>
             </>

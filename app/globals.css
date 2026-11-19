@@ -104,6 +104,13 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .list.photos.with-panel { padding-right: 448px; }
 .ptile.chosen { outline: 3px solid var(--ink); outline-offset: 2px; }
 .pill-btn.small { min-height: 32px; padding: 0 12px; margin-left: 12px; font: 500 13px var(--sans); vertical-align: middle; }
+.ptile { position: relative; }
+/* A small rating mark in the corner. White on the picture's own corner, no shadow. */
+.stars { position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px; background: var(--ground); font: 500 11px/1.5 var(--sans); color: var(--ink); }
+.rate { display: flex; gap: 2px; }
+.rate button { width: 36px; height: 36px; border-radius: 999px; font-size: 20px; line-height: 1; color: #cfcfcf; }
+.rate button.on { color: var(--ink); }
+.rate button:hover { background: var(--control); }
 .ptile img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .detail dd.grow { flex: 1; min-width: 0; }
 .inline { width: 100%; min-height: 32px; margin: -6px -10px -6px 0; padding: 0 10px; border: none; outline: none; border-radius: 999px; background: transparent; text-align: right; }

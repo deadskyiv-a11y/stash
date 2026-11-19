@@ -46,7 +46,7 @@ Tokens are in `app/globals.css` under `:root`.
   repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
 - **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
   `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
-  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql` and `0005_photo_film.sql` are applied.
+  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql` and `0006_photo_tags.sql` are applied.
   - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
   - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
   - Site URL and Redirect URLs point at the live address.
@@ -182,8 +182,16 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
 - **Step 1 is built. Reading a JPEG's details and thumbnail is tested on this Mac. Nothing that
   touches Drive has been run.** Kofi's plan: mostly high-quality JPEG exports from Lightroom,
   thousands of pictures over time.
-- **Agreed next steps:** (2) AI tags for contents, place names from GPS, grouping by subject,
-  search, and showing the Lightroom ratings; (3) photo book tools such as shortlists, once he
+- **Step 2 is built (19 November 2026), untried on the live site.** The AI reads each thumbnail
+  (`/api/photos/tag`, `tagPhoto` in `lib/ai.ts`) and writes a subject, tags and a one-line
+  description. The page queues every photo not yet read, one at a time, on load and after a
+  deposit. Group by Date, Place or Subject. The search box filters by words across name, place,
+  subject, description, tags, keywords, camera, lens, film and month. It is word matching in the
+  browser, not search by meaning. Ratings show as a small mark on the tile, can be set with a
+  star picker in the panel, and filter from the bottom bar.
+- Each row records the tokens its reading used (`ai_in`, `ai_out`). Kofi was promised a real
+  cost per photo, measured on his first photos, before he loads a large batch.
+- **Agreed next steps:** (3) photo book tools such as shortlists, once he
   has used it. Measure the AI cost on his first 50 photos and tell him before he loads many.
 
 ## 5. Confirmed, and not yet tried
