@@ -46,7 +46,7 @@ Tokens are in `app/globals.css` under `:root`.
   repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
 - **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
   `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
-  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql` and `0004_photos.sql` are applied.
+  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql` and `0005_photo_film.sql` are applied.
   - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
   - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
   - Site URL and Redirect URLs point at the live address.
@@ -164,6 +164,9 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   in `public.photos`: date taken, GPS, typed place, camera, lens, settings, Lightroom rating and
   keywords, and the Drive link and folder. `lib/photo-read.ts` reads these with `exifr`.
 - A batch can be given one typed place, for cameras with no GPS.
+- In a photo's panel Kofi can type over Taken (date), Place, Camera, Lens and Film, for what the
+  file does not say. He scans film, so those files arrive with no camera and the wrong date.
+  Changing the date does not move the original in Drive.
 - RAW and HEIC: the original always uploads. The thumbnail comes from the preview inside the
   file when the browser cannot open it. Untested on Kofi's camera.
 - Grid grouped by Date or Place. Removing a photo removes it from Stash only, never from Drive.

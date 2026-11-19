@@ -14,14 +14,29 @@ const ROOT = "Stash Photos";
 type Photo = {
   id: string; name: string; bytes: number | null; drive_id: string | null; drive_link: string | null; drive_folder: string | null;
   thumb_path: string | null; w: number | null; h: number | null; taken_at: string | null; lat: number | null; lng: number | null;
-  place: string | null; camera: string | null; lens: string | null; settings: string | null; rating: number | null; keywords: string[]; created_at: string;
+  place: string | null; camera: string | null; lens: string | null; film: string | null; settings: string | null; rating: number | null; keywords: string[]; created_at: string;
 };
-const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,settings,rating,keywords,created_at";
+const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at";
 
 const dateOf = (p: Photo) => new Date(p.taken_at || p.created_at);
 const month = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
-const full = (d: Date) => d.toLocaleString("en-GB", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" });
 const pad = (n: number) => String(n).padStart(2, "0");
+
+/** A detail Kofi can type over. It saves when he leaves the box or presses Enter. */
+function Field({ label, value, placeholder, type = "text", onSave }: { label: string; value: string; placeholder: string; type?: string; onSave: (v: string) => void }) {
+  const [v, setV] = useState(value);
+  return (
+    <div>
+      <dt>{label}</dt>
+      <dd className="grow">
+        <input className="inline" type={type} aria-label={label} value={v} placeholder={placeholder} autoComplete="off"
+          onChange={(e) => setV(e.target.value)}
+          onBlur={() => { if (v.trim() !== value) onSave(v.trim()); }}
+          onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
+      </dd>
+    </div>
+  );
+}
 
 /** The photo room: Kofi's selects. Originals go to his Google Drive; thumbnails and details stay here. */
 export function Photos() {
@@ -146,6 +161,14 @@ export function Photos() {
 
   const opened = open ? photos.find((p) => p.id === open) || null : null;
 
+  // Kofi's own entries, for what the file does not say: a place, or the camera and film behind a scan.
+  const edit = async (p: Photo, patch: Partial<Photo>) => {
+    const { error } = await supabase().from("photos").update(patch).eq("id", p.id);
+    if (error) { say("Could not save that. " + error.message); return; }
+    setPhotos((all) => all.map((x) => (x.id === p.id ? { ...x, ...patch } : x)));
+  };
+  const day = (iso: string | null) => { if (!iso) return ""; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+
   const remove = async (p: Photo) => {
     const { error } = await supabase().from("photos").delete().eq("id", p.id);
     if (error) { say("Could not remove. " + error.message); return; }
@@ -231,11 +254,18 @@ export function Photos() {
           <h2>{opened.name}</h2>
           {opened.drive_link && <a className="pill-btn link" href={opened.drive_link} target="_blank" rel="noreferrer">Open the original in Drive</a>}
           <dl>
-            <div><dt>Taken</dt><dd>{opened.taken_at ? full(new Date(opened.taken_at)) : "No date in the file"}</dd></div>
-            {opened.place && <div><dt>Place</dt><dd>{opened.place}</dd></div>}
+            <Field key={opened.id + "d"} label="Taken" type="date" value={day(opened.taken_at)} placeholder="Add a date" onSave={(v) => {
+              // Keep the time of day the camera recorded; a typed date with no time sits at midday.
+              const old = opened.taken_at ? new Date(opened.taken_at) : null;
+              const at = v ? new Date(`${v}T${old ? `${pad(old.getHours())}:${pad(old.getMinutes())}:${pad(old.getSeconds())}` : "12:00:00"}`) : null;
+              edit(opened, { taken_at: at && !isNaN(at.getTime()) ? at.toISOString() : null });
+            }} />
+            {opened.taken_at && <div><dt>Time</dt><dd>{new Date(opened.taken_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</dd></div>}
+            <Field key={opened.id + "p"} label="Place" value={opened.place || ""} placeholder="Add a place" onSave={(v) => edit(opened, { place: v || null })} />
             {opened.lat !== null && opened.lng !== null && <div><dt>Position</dt><dd><a href={`https://www.google.com/maps?q=${opened.lat},${opened.lng}`} target="_blank" rel="noreferrer">{opened.lat.toFixed(4)}, {opened.lng.toFixed(4)}</a></dd></div>}
-            {opened.camera && <div><dt>Camera</dt><dd>{opened.camera}</dd></div>}
-            {opened.lens && <div><dt>Lens</dt><dd>{opened.lens}</dd></div>}
+            <Field key={opened.id + "c"} label="Camera" value={opened.camera || ""} placeholder="Add a camera" onSave={(v) => edit(opened, { camera: v || null })} />
+            <Field key={opened.id + "l"} label="Lens" value={opened.lens || ""} placeholder="Add a lens" onSave={(v) => edit(opened, { lens: v || null })} />
+            <Field key={opened.id + "f"} label="Film" value={opened.film || ""} placeholder="Add a film stock" onSave={(v) => edit(opened, { film: v || null })} />
             {opened.settings && <div><dt>Settings</dt><dd>{opened.settings}</dd></div>}
             {opened.rating !== null && <div><dt>Rating</dt><dd>{opened.rating} of 5</dd></div>}
             {opened.drive_folder && <div><dt>In Drive</dt><dd>{opened.drive_folder}</dd></div>}
