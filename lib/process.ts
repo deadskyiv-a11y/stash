@@ -3,12 +3,14 @@ import { fetchImage, fetchPage, type Page } from "./fetch-page";
 import { read, type Reading } from "./ai";
 import { embed, type Authed } from "./server";
 import { SAVE_COLUMNS, type Save } from "./types";
+import { audioExt, transcribe } from "./transcribe";
 
 export type NewSave =
   | { kind: "link"; url: string; image?: string }
   | { kind: "note"; text: string; url?: string; from?: string } // url and from: a quote, and the page it was taken from
   | { kind: "image"; path: string; name?: string }
-  | { kind: "file"; path: string; name?: string; cover?: string };
+  | { kind: "file"; path: string; name?: string; cover?: string }
+  | { kind: "voice"; path: string; name?: string }; // a recording: stored as a note whose text is the transcript
 
 type Picture = { path: string; w: number; h: number; pale: boolean; forAi: Buffer };
 
@@ -100,6 +102,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
   const first: Record<string, string | null> =
     input.kind === "link" ? { kind: "link", url: input.url }
     : input.kind === "note" ? { kind: "note", note: input.text, url: input.url || null }
+    : input.kind === "voice" ? { kind: "note", title: "Voice note" }
     : { kind: input.kind, title: input.name || null };
   const { data: row, error } = await a.db.from("saves").insert(first).select("id").single();
   if (error || !row) throw new Error(error?.message || "Could not save");
@@ -112,7 +115,15 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     let filePath: string | null = null;
     let pdf: Buffer | null = null;
 
-    if (input.kind === "file") {
+    if (input.kind === "voice") {
+      const { data: file } = await a.db.storage.from("saves").download(input.path);
+      if (!file) throw new Error("Could not read the recording.");
+      const ext = audioExt(input.name);
+      const to = `${a.userId}/${id}.${ext}`;
+      const { error: mv } = await a.db.storage.from("saves").move(input.path, to);
+      filePath = mv ? input.path : to;
+      text = (await transcribe(Buffer.from(await file.arrayBuffer()), ext)) || "";
+    } else if (input.kind === "file") {
       const { data: file } = await a.db.storage.from("saves").download(input.path);
       const buf = file ? Buffer.from(await file.arrayBuffer()) : null;
       if (!buf || buf.subarray(0, 5).toString("latin1") !== "%PDF-") {
@@ -158,8 +169,10 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
 
     const source = input.kind === "link" ? input.url : input.kind === "note" ? input.url || null : null;
     const host = source ? new URL(source).hostname.replace(/^www\./, "") : null;
-    const reading: Reading | null = await read({
-      kind: input.kind,
+    const voice = input.kind === "voice";
+    // A recording that could not be turned into text has nothing for the AI to read.
+    const reading: Reading | null = voice && !text ? null : await read({
+      kind: voice ? "voice note" : input.kind,
       url: page?.url || source,
       site: page?.site || host,
       title: page?.title || (input.kind === "image" || input.kind === "file" ? input.name : input.kind === "note" && input.from ? `Quote from: ${input.from}` : null),
@@ -172,15 +185,15 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
 
     const title =
       reading?.title || page?.title?.slice(0, 140) ||
-      (input.kind === "note" ? input.text.split("\n")[0].slice(0, 80) : input.kind === "image" ? input.name || "Image" : input.kind === "file" ? input.name || "Document" : host) ||
+      (input.kind === "note" ? input.text.split("\n")[0].slice(0, 80) : voice ? text.slice(0, 80) || "Voice note" : input.kind === "image" ? input.name || "Image" : input.kind === "file" ? input.name || "Document" : host) ||
       "Untitled";
     const summary = reading?.summary || page?.description || null;
     const tags = reading?.tags || [];
     const cluster = reading?.cluster || "Unsorted";
     const subgroup = reading?.subgroup || null;
     const site = page?.site || host;
-    const searchText = [title, summary, input.kind === "note" ? input.text : "", tags.join(" "), cluster, subgroup, site,
-      (reading?.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), input.kind === "file" ? "pdf document file" : input.kind].filter(Boolean).join(" ");
+    const searchText = [title, summary, input.kind === "note" ? input.text : voice ? text : "", tags.join(" "), cluster, subgroup, site,
+      (reading?.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), input.kind === "file" ? "pdf document file" : voice ? "voice note recording" : input.kind].filter(Boolean).join(" ");
     const embedding = await embed(a, [title, summary, tags.join(", "), cluster, subgroup, text.slice(0, 1200)].filter(Boolean).join(". "));
 
     const { data: done, error: upErr } = await a.db
@@ -195,7 +208,8 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
         image_w: picture?.w || null,
         image_h: picture?.h || null,
         is_pale: picture?.pale || false,
-        form: reading?.form || null,
+        form: voice ? "voice" : reading?.form || null,
+        ...(voice ? { note: text || null } : {}),
         excerpt: page?.description ? page.description.slice(0, 300) : null,
         content: text ? text.slice(0, 6000) : null,
         search_text: searchText,

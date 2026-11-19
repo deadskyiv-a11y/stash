@@ -30,6 +30,15 @@ function looksLikeUrl(t: string): string | null {
   return null;
 }
 
+/** Plays a stored voice note. The file is private, so it needs a short-lived address first. */
+function Player({ path }: { path: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    supabase().storage.from("saves").createSignedUrl(path, 3600).then(({ data }) => setSrc(data?.signedUrl || ""));
+  }, [path]);
+  return src ? <audio controls src={src} style={{ width: "100%" }} /> : null;
+}
+
 function SignIn() {
   const [email, setEmail] = useState("");
   // A used or expired email link comes back as #error_description=... ; show it rather than a silent form.
@@ -182,10 +191,10 @@ function Library() {
   const shown = useMemo(() => (hits === null ? saves : saves.filter((s) => hits.has(s.id))), [saves, hits]);
   const opened = open ? saves.find((s) => s.id === open) || null : null;
 
-  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string; url?: string; from?: string } | { kind: "image" | "file"; path: string; name: string; cover?: string }, label: string) => {
+  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string; url?: string; from?: string } | { kind: "image" | "file" | "voice"; path: string; name: string; cover?: string }, label: string) => {
     const tempId = "temp-" + crypto.randomUUID();
     const temp: Save = {
-      id: tempId, kind: body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
+      id: tempId, kind: body.kind === "voice" ? "note" : body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
       note: body.kind === "note" ? body.text : null, tags: [], cluster: null, subgroup: null, facts: [], image_path: null, file_path: null, image_w: null, image_h: null,
       is_pale: false, pinned: false, form: null, excerpt: null, created_at: new Date().toISOString(),
     };
@@ -236,7 +245,8 @@ function Library() {
     if (!uid) return;
     for (const f of files) {
       const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
-      if (!f.type.startsWith("image/") && !isPdf) { say("Only images and PDFs can be saved for now."); continue; }
+      const isAudio = f.type.startsWith("audio/") || /\.(m4a|mp3|wav|ogg)$/i.test(f.name);
+      if (!f.type.startsWith("image/") && !isPdf && !isAudio) { say("Only images, PDFs and voice recordings can be saved for now."); continue; }
       if (f.size > 20 * 1024 * 1024) { say("That file is over 20 MB."); continue; }
       const path = `${uid}/upload-${crypto.randomUUID()}`;
       const { error } = await supabase().storage.from("saves").upload(path, f, { contentType: isPdf ? "application/pdf" : f.type });
@@ -249,7 +259,7 @@ function Library() {
         const up = await supabase().storage.from("saves").upload(cover, page1, { contentType: "image/jpeg" });
         if (up.error) cover = undefined;
       }
-      add({ kind: isPdf ? "file" : "image", cover, path, name: f.name.replace(/\.[^.]+$/, "") }, f.name);
+      add({ kind: isPdf ? "file" : isAudio ? "voice" : "image", cover, path, name: isAudio ? f.name : f.name.replace(/\.[^.]+$/, "") }, f.name);
     }
   }, [add, say]);
 
@@ -276,6 +286,33 @@ function Library() {
       say(e instanceof Error ? e.message : "Could not add the picture");
     }
   }, [say]);
+
+  // Voice note: record in the browser, then save the recording like any other file.
+  const recorder = useRef<MediaRecorder | null>(null);
+  const [recording, setRecording] = useState(false);
+  const record = async () => {
+    if (recorder.current) { recorder.current.stop(); return; }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // Safari records mp4, Chrome records webm. Both are accepted for transcription.
+      const type = MediaRecorder.isTypeSupported("audio/mp4") ? "audio/mp4" : "audio/webm";
+      const rec = new MediaRecorder(stream, { mimeType: type });
+      const parts: Blob[] = [];
+      rec.ondataavailable = (e) => { if (e.data.size) parts.push(e.data); };
+      rec.onstop = () => {
+        stream.getTracks().forEach((t) => t.stop());
+        recorder.current = null;
+        setRecording(false);
+        setAdding(false);
+        if (parts.length) addFiles([new File(parts, type === "audio/mp4" ? "Voice note.m4a" : "Voice note.webm", { type })]);
+      };
+      recorder.current = rec;
+      rec.start();
+      setRecording(true);
+    } catch {
+      say("Could not use the microphone. Allow it when the browser asks.");
+    }
+  };
 
   // The phone has no Cmd+V, so a button reads the clipboard: a picture if there is one, else the text.
   const pasteClip = async () => {
@@ -396,7 +433,7 @@ function Library() {
                   <span className="row-title">{s.title || s.url || "Untitled"}</span>
                   <span className="row-path">{[clusterOf(s), s.subgroup].filter(Boolean).join(" / ")}{s.site ? "  ·  " + s.site : ""}</span>
                 </span>
-                <span className="row-kind">{s.kind === "image" ? "Image" : s.kind === "link" ? "Link" : isQuote(s) ? "Quote" : s.kind === "note" ? "Note" : "PDF"}</span>
+                <span className="row-kind">{s.kind === "image" ? "Image" : s.kind === "link" ? "Link" : isQuote(s) ? "Quote" : s.form === "voice" ? "Voice" : s.kind === "note" ? "Note" : "PDF"}</span>
                 <span className="row-when">{when(s.created_at)}</span>
               </button>
             ))}
@@ -407,7 +444,7 @@ function Library() {
       {loaded && saves.length === 0 && (
         <div className="empty">
           <h2>Nothing saved yet</h2>
-          <p>Paste a link, drop an image or PDF, or press Save.</p>
+          <p>Paste a link, drop an image or PDF, record a voice note, or press Save.</p>
         </div>
       )}
 
@@ -449,10 +486,11 @@ function Library() {
           <textarea id="draft" autoFocus rows={3} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Paste a link or write a note"
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.form as HTMLFormElement).requestSubmit(); } }} />
           <div className="adder-actions">
-            <button type="button" className="pill-btn" onClick={() => file.current?.click()}>Choose image or PDF</button>
+            <button type="button" className="pill-btn" onClick={() => file.current?.click()}>Choose a file</button>
+            <button type="button" className={recording ? "ink" : "pill-btn"} onClick={record}>{recording ? "Stop and save" : "Record"}</button>
             <button type="submit" className="ink">Save</button>
           </div>
-          <input ref={file} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { addFiles([...(e.target.files || [])]); e.target.value = ""; setAdding(false); }} />
+          <input ref={file} type="file" accept="image/*,application/pdf,audio/*" multiple hidden onChange={(e) => { addFiles([...(e.target.files || [])]); e.target.value = ""; setAdding(false); }} />
         </form>
       )}
 
@@ -485,7 +523,8 @@ function Library() {
           )}
           <h2>{opened.title || "Untitled"}</h2>
           {opened.url && <a href={opened.url} target="_blank" rel="noreferrer">{opened.site || opened.url}</a>}
-          {opened.file_path && (
+          {opened.file_path && opened.kind === "note" && <Player key={opened.file_path} path={opened.file_path} />}
+          {opened.file_path && opened.kind === "file" && (
             <button type="button" className="pill-btn" onClick={async () => {
               // Open the tab first, while this is still a tap, or the browser blocks it as a pop-up.
               const w = window.open("", "_blank");

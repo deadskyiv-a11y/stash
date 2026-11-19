@@ -56,7 +56,10 @@ const Tiles = memo(function Tiles({ saves, layout, hits, urls }: Pick<Props, "sa
                 <span className="muted">{s.site}</span>
               </span>
             ) : s.kind === "note" ? (
-              <span className="tile-text">{s.note || s.title}</span>
+              <span className="tile-text">
+                <span className={s.form === "voice" ? "qt" : ""}>{s.note || s.title}</span>
+                {s.form === "voice" && <span className="muted">Voice note</span>}
+              </span>
             ) : (
               <span className="tile-text">
                 <span className="muted">{s.site}</span>

@@ -110,6 +110,15 @@ in the repository, never echo it, never commit it.
   This is a display rule in `lib/layout.ts`. The stored sub-group is never rewritten by it.
 - A new save sits under "Inbox" while it is read, then travels to its group (0.8 seconds).
 
+**Voice notes**
+- "Record" in the Save box (New note on the phone) records in the browser. Audio files can also
+  be dropped in or chosen. A voice note is a note whose `file_path` is the recording and whose
+  text is the transcript (`form` = `voice`). The side panel plays it back.
+- Transcription is OpenAI (`lib/transcribe.ts`, key `OPENAI_API_KEY`, model
+  `gpt-4o-mini-transcribe` unless `OPENAI_TRANSCRIBE_MODEL` says otherwise). With no key or a
+  failed call, the recording is still kept and plays, with no text, filed under Unsorted.
+- Untried. Accuracy on Kofi's voice and on Twi or Ga words is unknown.
+
 **How kinds look different** (Kofi asked for this on 19 November 2026; it bends the spec's
 "no captions on the canvas" rule for articles only)
 - Articles show a caption under the picture: headline, the page's opening words (`excerpt`,
