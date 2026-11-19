@@ -106,6 +106,7 @@ function Library() {
   const [zoom, setZoom] = useState(100);
   const [menu, setMenu] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [moving, setMoving] = useState<{ id: string; to: string } | null>(null);
   const canvas = useRef<CanvasHandle>(null);
   const box = useRef<HTMLInputElement>(null);
   const file = useRef<HTMLInputElement>(null);
@@ -408,6 +409,24 @@ function Library() {
             <div className="tags">{opened.tags.map((t) => (<button key={t} type="button" className="pill-btn" onClick={() => { setQ(t); setPick(null); setOpen(null); }}>{t}</button>))}</div>
           )}
           <div className="meta">{[clusterOf(opened), opened.subgroup].filter(Boolean).join(" / ")}  ·  {when(opened.created_at)}</div>
+          {/* Filing by hand, for a save the AI could not place or placed wrongly. */}
+          {!opened.id.startsWith("temp-") && (moving?.id === opened.id ? (
+            <form className="move" onSubmit={async (e) => {
+              e.preventDefault();
+              const to = moving.to.trim().slice(0, 40);
+              if (!to) return;
+              const { error } = await supabase().from("saves").update({ cluster: to, subgroup: null }).eq("id", opened.id);
+              if (error) { say("Could not move. " + error.message); return; }
+              setSaves((all) => all.map((x) => (x.id === opened.id ? { ...x, cluster: to, subgroup: null } : x)));
+              setMoving(null);
+            }}>
+              <input aria-label="Group" list="groups" autoFocus value={moving.to} onChange={(e) => setMoving({ id: opened.id, to: e.target.value })} placeholder="Group name" />
+              <datalist id="groups">{[...new Set(saves.map(clusterOf))].sort().map((c) => <option key={c} value={c} />)}</datalist>
+              <button type="submit" className="ink">Move</button>
+            </form>
+          ) : (
+            <button type="button" className="pill-btn" onClick={() => setMoving({ id: opened.id, to: "" })}>Move to a group</button>
+          ))}
           {!opened.id.startsWith("temp-") && (
             confirmDelete
               ? <button type="button" className="ink" onClick={() => remove(opened)}>Confirm delete</button>

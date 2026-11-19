@@ -63,6 +63,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const anim = useRef(0);
   const drag = useRef<{ px: number; py: number; cx: number; cy: number; moved: boolean } | null>(null);
   const ready = useRef(false);
+  const tapped = useRef(false);
   // Two fingers on a touch screen: pinch to zoom, move together to pan.
   const fingers = useRef(new Map<number, { x: number; y: number }>());
   const pinch = useRef<{ d: number; mx: number; my: number; cam: Cam } | null>(null);
@@ -211,7 +212,13 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         }
         const d = drag.current;
         drag.current = null;
-        if (!d || d.moved) return;
+        tapped.current = !!d && !d.moved;
+      }}
+      // Open on the click, not the finger lift: on a touch screen the click comes after, and would
+      // otherwise land on whatever the newly opened panel put under the finger (its link, a tag, Delete).
+      onClick={(e) => {
+        if (!tapped.current) return;
+        tapped.current = false;
         const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
         const id = el?.closest<HTMLElement>("[data-id]")?.dataset.id;
         if (id) onOpen(id);
