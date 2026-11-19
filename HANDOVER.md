@@ -192,6 +192,12 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
 - **The AI considers the shoot.** When reading a photo, the tag route tells it how other photos
   taken within three hours either side were filed, and asks it to keep a shoot together. This
   only shapes new readings; photos already read are not re-read. Untried.
+- **Map view** (Grid | Map in the bottom bar). Every photo with a position, passing the current
+  search and filters, on a draggable map (`leaflet`, `components/PhotoMap.tsx`). Photos close
+  together share one pin with a count; clicking it zooms in, or lists the photos when they sit
+  on one spot. A lone pin opens its photo. Photos with no position are counted in a note.
+  Tested on this Mac with made-up positions, not on the live site. Leaflet blends tile edges
+  with `plus-lighter`, which shows as white seams under the grey filter; `globals.css` overrides it.
 - **Projects.** A photo can be in several projects or none (`projects text[]` on the row; the
   list of projects is every name in use). Add or remove from a photo's panel or from a selection
   (`set_photo_project` database function, one call for many photos). Group by Project, or show

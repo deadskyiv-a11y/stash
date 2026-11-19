@@ -104,6 +104,22 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .list.photos.with-panel { padding-right: 448px; }
 .ptile.chosen { outline: 3px solid var(--ink); outline-offset: 2px; }
 .pill-btn.small { min-height: 32px; padding: 0 12px; margin-left: 12px; font: 500 13px var(--sans); vertical-align: middle; }
+/* Map view: grey tiles, photo thumbnails as pins. */
+.pmap { position: absolute; inset: 0; }
+.pmap-view { position: absolute; inset: 0; background: var(--control); }
+.pmap-view .leaflet-tile-pane { filter: grayscale(1) contrast(0.95); }
+/* The map library blends tile edges by adding their light, which shows as white seams once the tiles are filtered to grey. */
+/* So tiles are drawn plainly, and a hair oversize to cover the gap. */
+.pmap .pmap-view img.leaflet-tile { mix-blend-mode: normal !important; width: 256.5px !important; height: 256.5px !important; }
+.pmap-view .leaflet-control-attribution { font: 400 11px var(--sans); background: var(--ground); box-shadow: none; }
+.pmap-zoom { position: absolute; right: 28px; top: 88px; z-index: 500; }
+.pmap-note { position: absolute; left: 28px; top: 92px; z-index: 500; margin: 0; padding: 8px 14px; border-radius: 999px; background: var(--ground); font-size: 13px; color: var(--grey); max-width: calc(100vw - 180px); }
+.mpin-wrap { background: none; border: none; }
+.mpin { position: relative; display: block; width: 52px; height: 52px; border-radius: 4px; background: var(--ink); box-shadow: 0 0 0 3px var(--ground); cursor: pointer; }
+.mpin img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; display: block; }
+.mpin b { position: absolute; right: -8px; top: -8px; min-width: 22px; height: 22px; padding: 0 6px; border-radius: 999px; background: var(--ink); color: #fff; font: 500 12px/22px var(--sans); text-align: center; box-shadow: 0 0 0 2px var(--ground); }
+.ptile.small { height: 96px; width: 96px; }
+.detail .ptile.small img { width: 100%; height: 100%; border-radius: 0; }
 .projects { width: 100%; display: flex; flex-direction: column; gap: 8px; }
 .projects dl div { border-bottom: none; padding: 0; }
 .pick { min-height: 44px; padding: 0 16px; border: none; outline: none; border-radius: 999px; background: transparent; font: 500 14px var(--sans); color: inherit; cursor: pointer; max-width: 200px; }
@@ -207,6 +223,8 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   .phone-only { display: inline-flex !important; }
   .save.always { display: block; }
   .ptile { height: 120px; }
+  .pmap-zoom { right: 16px; top: 128px; }
+  .pmap-note { left: 16px; top: 132px; max-width: calc(100vw - 150px); }
   .list.photos.with-panel { padding-right: 16px; }
   /* On the phone the selection panel is a sheet across the bottom, so the photos above stay tappable. */
   .detail.sheet { top: auto; width: 100%; max-height: 46vh; border-left: none; border-top: 1px solid var(--line); padding: 16px 16px 24px; }

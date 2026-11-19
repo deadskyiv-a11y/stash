@@ -9,6 +9,7 @@ import { readPhoto } from "@/lib/photo-read";
 import { nameOf } from "@/lib/places";
 import { Logo } from "./Logo";
 import { PinMap, PlaceInput } from "./PlaceMap";
+import { PhotoMap } from "./PhotoMap";
 
 const NAME = process.env.NEXT_PUBLIC_APP_NAME || "Stash";
 const ROOT = "Stash Photos";
@@ -48,6 +49,8 @@ export function Photos() {
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [group, setGroup] = useState<"date" | "place" | "subject" | "project">("date");
   const [only, setOnly] = useState(""); // show just this project
+  const [view, setView] = useState<"grid" | "map">("grid");
+  const [spot, setSpot] = useState<string[] | null>(null); // photos sharing one pin on the map
   const [q, setQ] = useState("");
   const [stars, setStars] = useState(0); // show only photos rated at least this
   const [reading, setReading] = useState(0); // photos the AI still has to look at
@@ -210,6 +213,17 @@ export function Photos() {
     return group === "date" ? out : out.sort((a, b) => b[1].length - a[1].length);
   }, [photos, group, q, stars, only]);
   const showing = new Set(groups.flatMap(([, list]) => list.map((p) => p.id))).size;
+  // What the map shows: every photo passing the current search and filters that has a position.
+  const onMap = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { id: string; lat: number; lng: number; url?: string }[] = [];
+    for (const [, list] of groups) for (const p of list) {
+      if (seen.has(p.id) || p.lat === null || p.lng === null) continue;
+      seen.add(p.id);
+      out.push({ id: p.id, lat: p.lat, lng: p.lng, url: p.thumb_path ? urls[p.thumb_path] : undefined });
+    }
+    return out;
+  }, [groups, urls]);
   const projects = useMemo(() => [...new Set(photos.flatMap((p) => p.projects))].sort((a, b) => a.localeCompare(b)), [photos]);
 
   const opened = open ? photos.find((p) => p.id === open) || null : null;
@@ -275,7 +289,11 @@ export function Photos() {
 
   return (
     <main className="app">
-      <div className={"list photos" + (selecting || opened ? " with-panel" : "")}>
+      {view === "map" && <PhotoMap photos={onMap} onOpen={(id) => { setSpot(null); setConfirmDelete(false); setOpen(id); }} onSpot={(ids) => { setOpen(null); setSpot(ids); }} />}
+      {view === "map" && loaded && showing > onMap.length && (
+        <p className="pmap-note">{showing - onMap.length} {showing - onMap.length === 1 ? "photo has" : "photos have"} no place yet, so {showing - onMap.length === 1 ? "it is" : "they are"} not on the map.</p>
+      )}
+      <div className={"list photos" + (selecting || opened ? " with-panel" : "")} hidden={view === "map"}>
         {groups.map(([name, list]) => (
           <section key={name} className="pgroup">
             <h2 className="label cluster static">{name} <span>{list.length}</span>
@@ -347,6 +365,10 @@ export function Photos() {
 
       <footer className="bottom">
         <div className="bar">
+          <button type="button" className={view === "grid" ? "on" : ""} onClick={() => { setView("grid"); setSpot(null); }}>Grid</button>
+          <button type="button" className={view === "map" ? "on" : ""} onClick={() => { stopSelecting(); setView("map"); }}>Map</button>
+        </div>
+        <div className="bar" style={{ display: view === "map" ? "none" : undefined }}>
           <button type="button" className={group === "date" ? "on" : ""} onClick={() => setGroup("date")}>Date</button>
           <button type="button" className={group === "place" ? "on" : ""} onClick={() => setGroup("place")}>Place</button>
           <button type="button" className={group === "subject" ? "on" : ""} onClick={() => setGroup("subject")}>Subject</button>
@@ -366,7 +388,7 @@ export function Photos() {
             <button key={n} type="button" className={stars === n ? "on" : ""} onClick={() => setStars(n)}>{n === 0 ? "Any rating" : n === 5 ? "5★" : `${n}★ and up`}</button>
           ))}
         </div>
-        <div className="bar">
+        <div className="bar" style={{ display: view === "map" ? "none" : undefined }}>
           <button type="button" className={selecting ? "on" : ""} onClick={() => { if (selecting) stopSelecting(); else { setOpen(null); setSelecting(true); } }}>{selecting ? "Done selecting" : "Select"}</button>
         </div>
       </footer>
@@ -457,6 +479,26 @@ export function Photos() {
               <button type="button" className="pill-btn" onClick={() => setChosen(new Set())}>Clear selection</button>
             </>
           )}
+        </aside>
+      )}
+
+      {spot && !opened && (
+        <aside className="detail" aria-label="Photos at this place">
+          <button type="button" className="pill-btn close" onClick={() => setSpot(null)}>Close</button>
+          <h2>{spot.length} photos here</h2>
+          <div className="pgrid">
+            {spot.map((id) => {
+              const p = photos.find((x) => x.id === id);
+              if (!p) return null;
+              const url = p.thumb_path ? urls[p.thumb_path] : undefined;
+              return (
+                <button key={id} type="button" className="ptile small" aria-label={p.name} onClick={() => { setConfirmDelete(false); setOpen(id); }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {url ? <img src={url} alt="" loading="lazy" /> : <span className="tile-text muted">{p.name}</span>}
+                </button>
+              );
+            })}
+          </div>
         </aside>
       )}
 
