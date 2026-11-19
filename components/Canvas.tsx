@@ -63,6 +63,9 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
   const anim = useRef(0);
   const drag = useRef<{ px: number; py: number; cx: number; cy: number; moved: boolean } | null>(null);
   const ready = useRef(false);
+  // Two fingers on a touch screen: pinch to zoom, move together to pan.
+  const fingers = useRef(new Map<number, { x: number; y: number }>());
+  const pinch = useRef<{ d: number; mx: number; my: number; cam: Cam } | null>(null);
 
   const apply = useCallback(() => {
     const w = world.current;
@@ -105,8 +108,10 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
     }
     if (!isFinite(x0)) return { x: r.clientWidth / 2, y: r.clientHeight / 2, s: 1 };
     // ponytail: labels keep screen size, so reserve a fixed strip on the right for a name wider than its tiles.
-    const top = 150, bottom = 110, labelRoom = 160;
-    const availW = Math.max(200, r.clientWidth - 160 - labelRoom);
+    // A phone has a two-row header and no room to spare at the sides.
+    const small = r.clientWidth < 640;
+    const top = small ? 140 : 150, bottom = small ? 90 : 110, labelRoom = small ? 40 : 160;
+    const availW = Math.max(200, r.clientWidth - (small ? 32 : 160) - labelRoom);
     const availH = Math.max(200, r.clientHeight - top - bottom);
     const bw = Math.max(1, x1 - x0), bh = Math.max(1, y1 - y0);
     const s = Math.max(MIN, Math.min(availW / bw, availH / bh, some ? 2.2 : 1));
@@ -168,8 +173,25 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         cancelAnimationFrame(anim.current);
         (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
         drag.current = { px: e.clientX, py: e.clientY, cx: cam.current.x, cy: cam.current.y, moved: false };
+        fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (fingers.current.size === 2) {
+          const [a, b] = [...fingers.current.values()];
+          pinch.current = { d: Math.hypot(a.x - b.x, a.y - b.y) || 1, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, cam: { ...cam.current } };
+          drag.current = null;
+        }
       }}
       onPointerMove={(e) => {
+        if (fingers.current.has(e.pointerId)) fingers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        const p = pinch.current;
+        if (p && fingers.current.size >= 2) {
+          const [a, b] = [...fingers.current.values()];
+          const s = Math.max(MIN, Math.min(MAX, p.cam.s * (Math.hypot(a.x - b.x, a.y - b.y) / p.d)));
+          const k = s / p.cam.s;
+          // Keep the point that was between the fingers under them as they move.
+          cam.current = { x: (a.x + b.x) / 2 - (p.mx - p.cam.x) * k, y: (a.y + b.y) / 2 - (p.my - p.cam.y) * k, s };
+          apply();
+          return;
+        }
         const d = drag.current;
         if (!d) return;
         const dx = e.clientX - d.px, dy = e.clientY - d.py;
@@ -179,6 +201,14 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         apply();
       }}
       onPointerUp={(e) => {
+        fingers.current.delete(e.pointerId);
+        if (pinch.current) {
+          // Pinch over. If one finger stays down, carry on as a pan from where it is, and never open a tile.
+          pinch.current = null;
+          const [rest] = [...fingers.current.values()];
+          drag.current = rest ? { px: rest.x, py: rest.y, cx: cam.current.x, cy: cam.current.y, moved: true } : null;
+          return;
+        }
         const d = drag.current;
         drag.current = null;
         if (!d || d.moved) return;
@@ -186,7 +216,7 @@ export const Canvas = forwardRef<CanvasHandle, Props>(function Canvas(
         const id = el?.closest<HTMLElement>("[data-id]")?.dataset.id;
         if (id) onOpen(id);
       }}
-      onPointerCancel={() => { drag.current = null; }}
+      onPointerCancel={(e) => { fingers.current.delete(e.pointerId); pinch.current = null; drag.current = null; }}
     >
       <div ref={world} className="world">
         <Tiles saves={saves} layout={layout} hits={hits} urls={urls} />

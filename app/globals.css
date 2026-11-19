@@ -121,3 +121,22 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .error { color: #b3261e; font-size: 13px; }
 
 .toast { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 12px 18px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 14px; max-width: calc(100vw - 56px); z-index: 10; }
+
+/* Phone */
+@media (max-width: 640px) {
+  input, textarea { font-size: 16px; } /* iOS zooms the whole page into a smaller input */
+  .top { padding: 12px 16px; gap: 10px; }
+  .brand { min-width: 0; }
+  .command { order: 3; flex: 1 1 100%; max-width: none; }
+  .brand + .command { margin: 0; }
+  .save { min-width: 0; }
+  .adder { right: 16px; top: 128px; width: calc(100vw - 32px); }
+  .list { padding: 136px 16px 100px; }
+  /* One row of controls that slides sideways, instead of three stacked rows over the saves. */
+  .bottom { left: 0; right: 0; bottom: 0; padding: 0 16px calc(12px + env(safe-area-inset-bottom)); flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+  .bottom::-webkit-scrollbar { display: none; }
+  .bar { flex: none; flex-wrap: nowrap; }
+  .bar button { padding: 0 14px; white-space: nowrap; }
+  .bar .round, .zoom { display: none; } /* pinch does this on a phone */
+  .toast { bottom: 84px; }
+}
