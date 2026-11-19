@@ -190,7 +190,8 @@ function Library() {
     setSaves((s) => [temp, ...s]);
     try {
       const r = await api<{ save: Save }>("/api/saves", body);
-      setSaves((s) => s.map((x) => (x.id === tempId ? r.save : x)));
+      // Same tile, new id: it travels from the Inbox to its group instead of blinking out and in.
+      setSaves((s) => s.map((x) => (x.id === tempId ? { ...r.save, _key: tempId } : x)));
     } catch (e) {
       setSaves((s) => s.filter((x) => x.id !== tempId));
       say(e instanceof Error ? e.message : "Could not save");
@@ -297,6 +298,27 @@ function Library() {
     setOpen(null);
   };
 
+  const pin = async (s: Save) => {
+    const { error } = await supabase().from("saves").update({ pinned: !s.pinned }).eq("id", s.id);
+    if (error) { say("Could not change the pin. " + error.message); return; }
+    setSaves((all) => all.map((x) => (x.id === s.id ? { ...x, pinned: !s.pinned } : x)));
+  };
+
+  const [tidying, setTidying] = useState(false);
+  const tidyUp = async () => {
+    setTidying(true);
+    setToast("Tidying");
+    try {
+      const r = await api<{ saves: Save[] }>("/api/tidy", {});
+      const byId = new Map(r.saves.map((s) => [s.id, s]));
+      setSaves((all) => all.map((x) => (byId.has(x.id) ? { ...byId.get(x.id)!, _key: x._key } : x)));
+      say(r.saves.length === 0 ? "Already tidy. Nothing moved." : `Tidied. ${r.saves.length} ${r.saves.length === 1 ? "save" : "saves"} moved.`);
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Could not tidy");
+    }
+    setTidying(false);
+  };
+
   const reset = () => { setQ(""); setType("all"); setRecent(false); setPick(null); canvas.current?.refit(); };
   const filtering = hits !== null;
   const status = !loaded ? "" : !filtering ? `${saves.length} ${saves.length === 1 ? "save" : "saves"}` : hits!.size === 0 ? "No match" : `${hits!.size} of ${saves.length}`;
@@ -380,6 +402,7 @@ function Library() {
           <button type="button" className="round" aria-label="Zoom out" onClick={() => canvas.current?.zoomBy(1 / 1.35)}>−</button>
           <span className="zoom">{zoom}%</span>
           <button type="button" className="round" aria-label="Zoom in" onClick={() => canvas.current?.zoomBy(1.35)}>+</button>
+          <button type="button" disabled={tidying} onClick={tidyUp}>Tidy</button>
           <button type="button" className="white" onClick={reset}>See all</button>
         </div>
       </footer>
@@ -415,9 +438,9 @@ function Library() {
               e.preventDefault();
               const to = moving.to.trim().slice(0, 40);
               if (!to) return;
-              const { error } = await supabase().from("saves").update({ cluster: to, subgroup: null }).eq("id", opened.id);
+              const { error } = await supabase().from("saves").update({ cluster: to, subgroup: null, pinned: true }).eq("id", opened.id);
               if (error) { say("Could not move. " + error.message); return; }
-              setSaves((all) => all.map((x) => (x.id === opened.id ? { ...x, cluster: to, subgroup: null } : x)));
+              setSaves((all) => all.map((x) => (x.id === opened.id ? { ...x, cluster: to, subgroup: null, pinned: true } : x)));
               setMoving(null);
             }}>
               <input aria-label="Group" list="groups" autoFocus value={moving.to} onChange={(e) => setMoving({ id: opened.id, to: e.target.value })} placeholder="Group name" />
@@ -427,6 +450,12 @@ function Library() {
           ) : (
             <button type="button" className="pill-btn" onClick={() => setMoving({ id: opened.id, to: "" })}>Move to a group</button>
           ))}
+          {!opened.id.startsWith("temp-") && (
+            <>
+              <button type="button" className={opened.pinned ? "ink" : "pill-btn"} aria-pressed={opened.pinned} onClick={() => pin(opened)}>{opened.pinned ? "Pinned" : "Pin"}</button>
+              {opened.pinned && <p className="meta">Pinned. Tidy will not move this save.</p>}
+            </>
+          )}
           {!opened.id.startsWith("temp-") && (
             confirmDelete
               ? <button type="button" className="ink" onClick={() => remove(opened)}>Confirm delete</button>

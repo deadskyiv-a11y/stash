@@ -55,9 +55,18 @@ function shelve<T extends { w: number; h: number }>(items: T[], maxWidth: number
 
 export function computeLayout(saves: Save[]): Layout {
   const groups = new Map<string, Map<string, Save[]>>();
+  const size = new Map<string, number>();
+  const subSize = new Map<string, number>();
   for (const s of saves) {
     const c = clusterOf(s);
-    const sub = c === "Inbox" ? "" : s.subgroup || "";
+    size.set(c, (size.get(c) || 0) + 1);
+    subSize.set(c + "/" + (s.subgroup || ""), (subSize.get(c + "/" + (s.subgroup || "")) || 0) + 1);
+  }
+  for (const s of saves) {
+    const c = clusterOf(s);
+    // Sub-groups split out as a cluster grows: none under 6 saves, and never a sub-group of one.
+    const named = c !== "Inbox" && (size.get(c) || 0) >= 6 && (subSize.get(c + "/" + (s.subgroup || "")) || 0) >= 2;
+    const sub = named ? s.subgroup || "" : "";
     if (!groups.has(c)) groups.set(c, new Map());
     const m = groups.get(c)!;
     if (!m.has(sub)) m.set(sub, []);

@@ -65,7 +65,7 @@ export async function setPicture(a: Authed, id: string, uploadPath: string): Pro
   if (!picture) throw new Error("Could not use that picture");
 
   // Read the save again with the screenshot, so the title, filing and search reflect what it shows.
-  const { data: row } = await a.db.from("saves").select("url,site,title,summary,content,tags,cluster,subgroup").eq("id", id).single();
+  const { data: row } = await a.db.from("saves").select("url,site,title,summary,content,tags,cluster,subgroup,pinned").eq("id", id).single();
   const text = row?.content || "";
   const reading = await read({
     kind: "link", url: row?.url ?? null, site: row?.site ?? null, title: row?.title ?? null, description: row?.summary ?? null,
@@ -78,8 +78,10 @@ export async function setPicture(a: Authed, id: string, uploadPath: string): Pro
       (reading.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), "link"].filter(Boolean).join(" ");
     const embedding = await embed(a, [reading.title, reading.summary, tags.join(", "), reading.cluster, reading.subgroup, text.slice(0, 1200)].filter(Boolean).join(". "));
     Object.assign(update, {
-      title: reading.title || row?.title, summary: reading.summary || row?.summary, tags, cluster: reading.cluster || row?.cluster,
-      subgroup: reading.subgroup || null, facts: reading.facts || [], search_text: searchText,
+      title: reading.title || row?.title, summary: reading.summary || row?.summary, tags,
+      // Pinned saves stay where Kofi put them.
+      ...(row?.pinned ? {} : { cluster: reading.cluster || row?.cluster, subgroup: reading.subgroup || null }),
+      facts: reading.facts || [], search_text: searchText,
       ...(embedding ? { embedding: JSON.stringify(embedding) } : {}),
     });
   }

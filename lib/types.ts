@@ -19,6 +19,8 @@ export type Save = {
   is_pale: boolean;
   pinned: boolean;
   created_at: string;
+  /** Browser only: keeps a tile's place on screen while its temporary id is swapped for the real one. */
+  _key?: string;
 };
 
 export const SAVE_COLUMNS =

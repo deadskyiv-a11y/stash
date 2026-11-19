@@ -32,7 +32,7 @@ const Tiles = memo(function Tiles({ saves, layout, hits, urls }: Pick<Props, "sa
         const dim = hits !== null && !hits.has(s.id);
         const cls = ["tile", s.kind, url ? "has-image" : "", s.is_pale ? "pale" : "", s.status === "processing" ? "processing" : "", dim ? "dim" : ""].join(" ");
         return (
-          <div key={s.id} data-id={s.id} className={cls} style={{ left: t.x, top: t.y, width: t.w, height: t.h }}>
+          <div key={s._key || s.id} data-id={s.id} className={cls} style={{ left: t.x, top: t.y, width: t.w, height: t.h }}>
             {url ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={url} alt={s.title || ""} loading="lazy" decoding="async" draggable={false} />
