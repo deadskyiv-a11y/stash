@@ -122,8 +122,36 @@ async function fromOembed(input: string): Promise<Page | null> {
   }
 }
 
+// IMDb puts a robot check in front of its pages. OMDb is a film database with a proper API that
+// looks a film up by its IMDb number and returns the title, plot and poster.
+async function fromOmdb(input: string): Promise<Page | null> {
+  const key = process.env.OMDB_API_KEY;
+  const u = new URL(input);
+  const id = /(^|\.)imdb\.com$/.test(u.hostname) ? /\/title\/(tt\d+)/.exec(u.pathname)?.[1] : null;
+  if (!key || !id) return null;
+  try {
+    const o = await safeFetch(`https://www.omdbapi.com/?i=${id}&plot=short&apikey=${encodeURIComponent(key)}`, "application/json", 200_000);
+    const j = JSON.parse(o.body.toString("utf8"));
+    if (j.Response !== "True" || !j.Title) return null;
+    const has = (v: unknown): v is string => typeof v === "string" && v !== "" && v !== "N/A";
+    const facts = [["Director", j.Director], ["Cast", j.Actors], ["Genre", j.Genre], ["Released", j.Released], ["Runtime", j.Runtime]]
+      .filter(([, v]) => has(v)).map(([k, v]) => `${k}: ${v}`);
+    return {
+      url: `https://www.imdb.com/title/${id}/`,
+      site: "IMDb",
+      title: has(j.Year) ? `${j.Title} (${j.Year})` : j.Title,
+      description: has(j.Plot) ? j.Plot : null,
+      // The poster comes small by default; ask the same address for a larger one.
+      imageUrl: has(j.Poster) ? j.Poster.replace(/_SX\d+/, "_SX900") : null,
+      text: [has(j.Type) ? `A ${j.Type}.` : "", has(j.Plot) ? j.Plot : "", ...facts].filter(Boolean).join("\n"),
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function fetchPage(input: string): Promise<Page> {
-  const embedded = await fromOembed(input);
+  const embedded = (await fromOembed(input)) || (await fromOmdb(input));
   if (embedded) return embedded;
   const { res, body, finalUrl } = await safeFetch(input, "text/html,application/xhtml+xml", 2_000_000);
   const u = new URL(finalUrl);
