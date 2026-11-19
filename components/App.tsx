@@ -307,7 +307,7 @@ function Library() {
       {view === "canvas" ? (
         <Canvas ref={canvas} saves={saves} layout={layout} hits={hits} urls={urls} focusKey={focusKey}
           onOpen={(id) => { setConfirmDelete(false); setOpen(id); }}
-          onPick={(l: Label) => { setQ(""); setPick({ cluster: l.cluster, sub: l.sub }); }}
+          onPick={(l: Label) => { setQ(""); setPick((p) => (p && p.cluster === l.cluster && p.sub === l.sub ? null : { cluster: l.cluster, sub: l.sub })); }}
           onZoom={setZoom} />
       ) : (
         <div className="list">
