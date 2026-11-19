@@ -6,6 +6,7 @@ import { api, supabase } from "@/lib/supabase-browser";
 import { SAVE_COLUMNS, type Kind, type Save } from "@/lib/types";
 import { clusterOf, computeLayout, type Label } from "@/lib/layout";
 import { Canvas, type CanvasHandle } from "./Canvas";
+import { Logo } from "./Logo";
 
 const NAME = process.env.NEXT_PUBLIC_APP_NAME || "Stash";
 type TypeFilter = "all" | Kind;
@@ -45,7 +46,7 @@ function SignIn() {
           if (error) { setState("error"); setMsg(error.message); } else setState("sent");
         }}
       >
-        <h1>{NAME}</h1>
+        <h1><Logo height={44} title={NAME} /></h1>
         {state === "sent" ? (
           <p>Check your email for a sign-in link, then open it on this device.</p>
         ) : (
@@ -286,7 +287,7 @@ function Library() {
 
       <header className="top">
         <div className="brand">
-          <button type="button" className="plain" onClick={() => setMenu((m) => !m)} aria-expanded={menu}>{NAME}</button>
+          <button type="button" className="plain" onClick={() => setMenu((m) => !m)} aria-expanded={menu} aria-label={NAME + " menu"}><Logo height={24} title={NAME} /></button>
           {menu && <button type="button" className="pill-btn" onClick={() => supabase().auth.signOut()}>Sign out</button>}
         </div>
         <div className="command">
