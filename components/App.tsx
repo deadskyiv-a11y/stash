@@ -257,6 +257,20 @@ function Library() {
     }
   }, [say]);
 
+  // The phone has no Cmd+V, so a button reads the clipboard: a picture if there is one, else the text.
+  const pasteClip = async () => {
+    try {
+      for (const it of await navigator.clipboard.read()) {
+        const img = it.types.find((t) => t.startsWith("image/"));
+        if (img) { addFiles([new File([await it.getType(img)], "Pasted image", { type: img })]); return; }
+        if (it.types.includes("text/plain")) { addText(await (await it.getType("text/plain")).text()); return; }
+      }
+      say("Nothing to paste.");
+    } catch {
+      say("Could not read the clipboard. Tap Paste when the phone asks.");
+    }
+  };
+
   // Paste anywhere, drop anywhere, Cmd+K for the box, Esc to clear.
   useEffect(() => {
     const typing = () => { const a = document.activeElement; return a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement; };
@@ -387,6 +401,8 @@ function Library() {
           <input id="q" ref={box} type="text" value={q} onChange={(e) => { setQ(e.target.value); setPick(null); setReply(null); }} onKeyDown={(e) => { if (e.key === "Enter") ask(); }} placeholder="Search, or ask a question" autoComplete="off" spellCheck={false} />
           <span className="count">{status}</span>
         </div>
+        <button type="button" className="pill-btn phone" onClick={pasteClip}>Paste</button>
+        <button type="button" className="ink phone" onClick={() => setAdding((a) => !a)}>New note</button>
         <button type="button" className="ink save" onClick={() => setAdding((a) => !a)}>Save</button>
       </header>
 
