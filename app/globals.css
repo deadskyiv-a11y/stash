@@ -102,6 +102,11 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .ptile { height: 180px; border-radius: 2px; overflow: hidden; background: var(--control); flex: none; }
 /* Keep every photo reachable while a panel is open beside the grid. */
 .list.photos.with-panel { padding-right: 448px; }
+/* Order mode: a number on each photo, and a bar showing where a dragged photo will land. */
+.seq { position: absolute; left: 6px; top: 6px; min-width: 22px; padding: 2px 7px; border-radius: 999px; background: var(--ink); color: #fff; font: 500 11px/1.5 var(--sans); text-align: center; }
+.ptile[draggable="true"] { cursor: grab; }
+.ptile.lifting { opacity: 0.35; }
+.ptile.drop-here { box-shadow: -8px 0 0 -4px var(--ink); overflow: visible; }
 .ptile.chosen { outline: 3px solid var(--ink); outline-offset: 2px; }
 .pill-btn.small { min-height: 32px; padding: 0 12px; margin-left: 12px; font: 500 13px var(--sans); vertical-align: middle; }
 /* Large view: one photograph on the plain white ground, controls kept to the edges. */

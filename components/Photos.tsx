@@ -48,7 +48,11 @@ export function Photos() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const [group, setGroup] = useState<"date" | "place" | "subject" | "project">("date");
+  const [group, setGroup] = useState<"date" | "place" | "subject" | "project" | "order">("date");
+  // Each project's photographs in the order Kofi has put them, first to last.
+  const [orders, setOrders] = useState<Record<string, string[]>>({});
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
   const [only, setOnly] = useState(""); // show just this project
   const [view, setView] = useState<"grid" | "map">("grid");
   const [inArchive, setInArchive] = useState(false); // looking at archived photos instead of live ones
@@ -85,6 +89,9 @@ export function Photos() {
 
   useEffect(() => {
     queueMicrotask(() => setConnected(driveConnected()));
+    supabase().from("project_orders").select("project,ids").then(({ data }) => {
+      if (data) setOrders(Object.fromEntries(data.map((r) => [r.project as string, r.ids as string[]])));
+    });
     (async () => {
       // The database hands back 1,000 rows at a time.
       const all: Photo[] = [];
@@ -212,6 +219,18 @@ export function Photos() {
     return () => { window.removeEventListener("dragover", over); window.removeEventListener("drop", drop); window.removeEventListener("keydown", key); };
   }, [deposit, router]);
 
+  // Order mode only makes sense inside one project. Without a project picked it falls back to dates.
+  const ordering = group === "order" && only !== "";
+  // A project's full sequence: the saved order first, then any photo not yet placed, oldest first.
+  const sequenceOf = useCallback((project: string) => {
+    const mine = photos.filter((p) => p.projects.includes(project));
+    const have = new Set(mine.map((p) => p.id));
+    const saved = (orders[project] || []).filter((id) => have.has(id));
+    const placed = new Set(saved);
+    const rest = mine.filter((p) => !placed.has(p.id)).sort((a, b) => dateOf(a).getTime() - dateOf(b).getTime()).map((p) => p.id);
+    return [...saved, ...rest];
+  }, [photos, orders]);
+
   const groups = useMemo(() => {
     const words = q.toLowerCase().split(/\s+/).filter(Boolean);
     const sorted = [...photos].sort((a, b) => dateOf(b).getTime() - dateOf(a).getTime());
@@ -226,16 +245,20 @@ export function Photos() {
         if (!words.every((w) => hay.includes(w))) continue;
       }
       // A photo in several projects shows under each of them.
-      const keys = group === "project" ? (p.projects.length ? p.projects : ["No project"])
-        : [group === "date" ? month(dateOf(p)) : group === "place" ? p.place || "No place given" : p.subject || (p.tagged ? "Other" : "Not read yet")];
+      const keys = ordering ? [only] : group === "project" ? (p.projects.length ? p.projects : ["No project"])
+        : [group === "date" || group === "order" ? month(dateOf(p)) : group === "place" ? p.place || "No place given" : p.subject || (p.tagged ? "Other" : "Not read yet")];
       for (const k of keys) {
         if (!map.has(k)) map.set(k, []);
         map.get(k)!.push(p);
       }
     }
+    if (ordering) {
+      const rank = new Map(sequenceOf(only).map((id, i) => [id, i]));
+      return [...map.entries()].map(([k, list]) => [k, [...list].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))] as [string, Photo[]]);
+    }
     const out = [...map.entries()];
     return group === "date" ? out : out.sort((a, b) => b[1].length - a[1].length);
-  }, [photos, group, q, stars, only, inArchive]);
+  }, [photos, group, q, stars, only, inArchive, ordering, sequenceOf]);
   const archivedCount = useMemo(() => photos.filter((p) => p.archived).length, [photos]);
   const pool = inArchive ? archivedCount : photos.length - archivedCount;
   const showing = new Set(groups.flatMap(([, list]) => list.map((p) => p.id))).size;
@@ -339,6 +362,23 @@ export function Photos() {
     setFetching(false);
   };
 
+  // Moves one photo to just before another in the project's order (or to the end), and saves the whole order.
+  const reorder = async (id: string, before: string | null) => {
+    if (!ordering || id === before) return;
+    const ids = sequenceOf(only).filter((x) => x !== id);
+    const i = before ? ids.indexOf(before) : -1;
+    if (i < 0) ids.push(id); else ids.splice(i, 0, id);
+    setOrders((o) => ({ ...o, [only]: ids }));
+    const { error } = await supabase().from("project_orders").upsert({ project: only, ids, updated_at: new Date().toISOString() }, { onConflict: "user_id,project" });
+    if (error) say("Could not save the order. " + error.message);
+  };
+  // One place earlier or later, for the phone and the keyboard, where dragging is awkward.
+  const nudge = (id: string, by: number) => {
+    const ids = sequenceOf(only), i = ids.indexOf(id), j = i + by;
+    if (i < 0 || j < 0 || j >= ids.length) return;
+    reorder(id, by < 0 ? ids[j] : ids[j + 1] ?? null);
+  };
+
   // Archive puts photos out of sight without removing them. Restore brings them back.
   const setArchived = async (ids: string[], archived: boolean) => {
     if (ids.length === 0) return;
@@ -388,11 +428,17 @@ export function Photos() {
                 const url = p.thumb_path ? urls[p.thumb_path] : undefined;
                 const w = p.w && p.h ? Math.round((180 * p.w) / p.h) : 180;
                 return (
-                  <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "")} style={{ width: w }} aria-label={p.name} aria-pressed={selecting ? chosen.has(p.id) : undefined}
+                  <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "") + (ordering && over === p.id && dragging !== p.id ? " drop-here" : "") + (dragging === p.id ? " lifting" : "")} style={{ width: w }}
+                    draggable={ordering && !selecting}
+                    onDragStart={(e) => { setDragging(p.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", p.id); }}
+                    onDragOver={(e) => { if (dragging) { e.preventDefault(); if (over !== p.id) setOver(p.id); } }}
+                    onDrop={(e) => { if (dragging) { e.preventDefault(); e.stopPropagation(); reorder(dragging, p.id); setDragging(null); setOver(null); } }}
+                    onDragEnd={() => { setDragging(null); setOver(null); }} aria-label={p.name} aria-pressed={selecting ? chosen.has(p.id) : undefined}
                     onClick={(e) => { if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setInfo(false); setOpen(p.id); setBig(true); } }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {url ? <img src={url} alt="" loading="lazy" decoding="async" /> : <span className="tile-text muted">{p.thumb_path ? "" : p.name}</span>}
                     {p.rating ? <span className="stars" aria-label={`${p.rating} stars`}>{p.rating}★</span> : null}
+                    {ordering && <span className="seq">{sequenceOf(only).indexOf(p.id) + 1}</span>}
                   </button>
                 );
               })}
@@ -457,6 +503,7 @@ export function Photos() {
           <button type="button" className={group === "place" ? "on" : ""} onClick={() => setGroup("place")}>Place</button>
           <button type="button" className={group === "subject" ? "on" : ""} onClick={() => setGroup("subject")}>Subject</button>
           <button type="button" className={group === "project" ? "on" : ""} onClick={() => setGroup("project")}>Project</button>
+          {only && <button type="button" className={group === "order" ? "on" : ""} onClick={() => setGroup("order")}>Order</button>}
         </div>
         {(archivedCount > 0 || inArchive) && (
           <div className="bar">
@@ -558,6 +605,13 @@ export function Photos() {
           </div>
           {opened.tags.length > 0 && <div className="tags">{opened.tags.map((t) => <button key={t} type="button" className="pill-btn" onClick={() => { setQ(t); setOpen(null); }}>{t}</button>)}</div>}
           {opened.keywords.length > 0 && <div className="tags">{opened.keywords.map((k) => <span key={k} className="pill-btn link">{k}</span>)}</div>}
+          {ordering && opened.projects.includes(only) && (
+            <div className="tags">
+              <button type="button" className="pill-btn" onClick={() => nudge(opened.id, -1)}>Move earlier</button>
+              <button type="button" className="pill-btn" onClick={() => nudge(opened.id, 1)}>Move later</button>
+              <span className="meta" style={{ alignSelf: "center" }}>Number {sequenceOf(only).indexOf(opened.id) + 1} in {only}</span>
+            </div>
+          )}
           <button type="button" className="pill-btn" onClick={() => setArchived([opened.id], !opened.archived)}>{opened.archived ? "Restore from the archive" : "Archive"}</button>
           {confirmDelete
             ? <button type="button" className="ink" onClick={() => remove(opened)}>Confirm remove</button>
