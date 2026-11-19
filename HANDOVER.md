@@ -46,7 +46,7 @@ Tokens are in `app/globals.css` under `:root`.
   repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
 - **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
   `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
-  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql`, `0006_photo_tags.sql`, `0007_photo_projects.sql`, `0008_save_recipe.sql` and `0009_photo_view.sql` are applied.
+  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql`, `0006_photo_tags.sql`, `0007_photo_projects.sql`, `0008_save_recipe.sql`, `0009_photo_view.sql` and `0010_photo_archive.sql` are applied.
   - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
   - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
   - Site URL and Redirect URLs point at the live address.
@@ -215,6 +215,12 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   preview". "Load the original" fetches the full file from Drive into the browser, which is
   what makes deep zoom sharp. Zoom, drag and rating keys tested on this Mac with a sample
   picture; Kofi confirmed the view opens. Two earlier versions shipped untested and had bugs.
+- **Archive.** `archived` on the row. An archived photo leaves the grid, the map, search and the
+  large view until "Archive N" in the bottom bar is switched on, which shows only archived
+  photos. Archive or restore from a photo's panel, from the large view (button or the X key,
+  which then moves to the next photo), or for a selection. The original in Drive is untouched
+  and the photo keeps its projects, rating and details. Untried. Photo room only; Stash's saves
+  have no archive.
 - **Drive pass renewal.** A batch starts on a fresh pass, and one about to run out is renewed
   mid-batch. Google renews through a pop-up window, which the browser may block when no click
   led to it. The batch then pauses and a card offers "Connect and carry on" with the photos

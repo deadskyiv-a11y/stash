@@ -19,9 +19,9 @@ type Photo = {
   id: string; name: string; bytes: number | null; drive_id: string | null; drive_link: string | null; drive_folder: string | null;
   thumb_path: string | null; w: number | null; h: number | null; taken_at: string | null; lat: number | null; lng: number | null;
   place: string | null; camera: string | null; lens: string | null; film: string | null; settings: string | null; rating: number | null; keywords: string[]; created_at: string;
-  tags: string[]; caption: string | null; subject: string | null; tagged: boolean; projects: string[]; view_path: string | null;
+  tags: string[]; caption: string | null; subject: string | null; tagged: boolean; projects: string[]; view_path: string | null; archived: boolean;
 };
-const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at,tags,caption,subject,tagged,projects,view_path";
+const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at,tags,caption,subject,tagged,projects,view_path,archived";
 
 const dateOf = (p: Photo) => new Date(p.taken_at || p.created_at);
 const month = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
@@ -51,6 +51,7 @@ export function Photos() {
   const [group, setGroup] = useState<"date" | "place" | "subject" | "project">("date");
   const [only, setOnly] = useState(""); // show just this project
   const [view, setView] = useState<"grid" | "map">("grid");
+  const [inArchive, setInArchive] = useState(false); // looking at archived photos instead of live ones
   const [spot, setSpot] = useState<string[] | null>(null); // photos sharing one pin on the map
   const [waiting, setWaiting] = useState<File[] | null>(null); // a batch paused until Drive is reconnected
   // The large view: one photo filling the screen, with arrows to move between neighbours.
@@ -216,6 +217,7 @@ export function Photos() {
     const sorted = [...photos].sort((a, b) => dateOf(b).getTime() - dateOf(a).getTime());
     const map = new Map<string, Photo[]>();
     for (const p of sorted) {
+      if (p.archived !== inArchive) continue; // archived photos are out of sight until the archive is opened
       if (stars && (p.rating || 0) < stars) continue;
       if (only && !p.projects.includes(only)) continue;
       if (words.length) {
@@ -233,7 +235,9 @@ export function Photos() {
     }
     const out = [...map.entries()];
     return group === "date" ? out : out.sort((a, b) => b[1].length - a[1].length);
-  }, [photos, group, q, stars, only]);
+  }, [photos, group, q, stars, only, inArchive]);
+  const archivedCount = useMemo(() => photos.filter((p) => p.archived).length, [photos]);
+  const pool = inArchive ? archivedCount : photos.length - archivedCount;
   const showing = new Set(groups.flatMap(([, list]) => list.map((p) => p.id))).size;
   // What the map shows: every photo passing the current search and filters that has a position.
   const onMap = useMemo(() => {
@@ -335,6 +339,25 @@ export function Photos() {
     setFetching(false);
   };
 
+  // Archive puts photos out of sight without removing them. Restore brings them back.
+  const setArchived = async (ids: string[], archived: boolean) => {
+    if (ids.length === 0) return;
+    for (let i = 0; i < ids.length; i += 200) {
+      const { error } = await supabase().from("photos").update({ archived }).in("id", ids.slice(i, i + 200));
+      if (error) { say("Could not save that. " + error.message); return; }
+    }
+    const hit = new Set(ids);
+    // In the large view, move on to the next photo that is staying.
+    if (open && hit.has(open)) {
+      const next = sequence.slice(at + 1).concat(sequence.slice(0, at)).find((id) => !hit.has(id));
+      if (big && next) setOpen(next); else { setBig(false); setInfo(false); setOpen(null); }
+    }
+    setPhotos((all) => all.map((x) => (hit.has(x.id) ? { ...x, archived } : x)));
+    setChosen(new Set());
+    if (!archived && archivedCount - ids.length <= 0) setInArchive(false);
+    say(`${archived ? "Archived" : "Restored"} ${ids.length} ${ids.length === 1 ? "photo" : "photos"}.`);
+  };
+
   const toggleInfo = useCallback(() => setInfo((x) => !x), []);
   const rate = (n: number | null) => { if (opened) edit(opened, { rating: n }); };
   const day = (iso: string | null) => { if (!iso) return ""; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -395,7 +418,7 @@ export function Photos() {
           <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
           <label htmlFor="pq" className="sr">Search your photos</label>
           <input id="pq" type="text" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search your photos" autoComplete="off" spellCheck={false} />
-          <span className="count">{busy ? `Uploading ${Math.min(busy.done + 1, busy.total)} of ${busy.total}` : reading > 0 ? `Reading ${reading}` : !loaded ? "" : showing === photos.length ? `${photos.length} ${photos.length === 1 ? "photo" : "photos"}` : showing === 0 ? "No match" : `${showing} of ${photos.length}`}</span>
+          <span className="count">{busy ? `Uploading ${Math.min(busy.done + 1, busy.total)} of ${busy.total}` : reading > 0 ? `Reading ${reading}` : !loaded ? "" : showing === pool ? `${pool} ${pool === 1 ? "photo" : "photos"}${inArchive ? " archived" : ""}` : showing === 0 ? "No match" : `${showing} of ${pool}`}</span>
         </div>
         <button type="button" className="ink save always" disabled={!!busy} onClick={() => setAdding((a) => !a)}>Add photos</button>
       </header>
@@ -435,6 +458,11 @@ export function Photos() {
           <button type="button" className={group === "subject" ? "on" : ""} onClick={() => setGroup("subject")}>Subject</button>
           <button type="button" className={group === "project" ? "on" : ""} onClick={() => setGroup("project")}>Project</button>
         </div>
+        {(archivedCount > 0 || inArchive) && (
+          <div className="bar">
+            <button type="button" className={inArchive ? "on" : ""} onClick={() => { stopSelecting(); setOpen(null); setBig(false); setSpot(null); setInArchive((x) => !x); }}>Archive {archivedCount}</button>
+          </div>
+        )}
         {projects.length > 0 && (
           <div className="bar">
             <label htmlFor="only" className="sr">Show one project</label>
@@ -460,7 +488,8 @@ export function Photos() {
           place={`${at + 1} of ${sequence.length}`}
           note={originals[opened.id] ? "original" : opened.view_path ? "" : "small preview"}
           canLoad={!originals[opened.id] && !!opened.drive_id}
-          onStep={step} onClose={closeBig} onInfo={toggleInfo} onRate={rate} onLoad={() => loadOriginal(opened)} />
+          onStep={step} onClose={closeBig} onInfo={toggleInfo} onRate={rate} onLoad={() => loadOriginal(opened)}
+          archived={opened.archived} onArchive={() => setArchived([opened.id], !opened.archived)} />
       )}
 
       {waiting && !busy && (
@@ -529,6 +558,7 @@ export function Photos() {
           </div>
           {opened.tags.length > 0 && <div className="tags">{opened.tags.map((t) => <button key={t} type="button" className="pill-btn" onClick={() => { setQ(t); setOpen(null); }}>{t}</button>)}</div>}
           {opened.keywords.length > 0 && <div className="tags">{opened.keywords.map((k) => <span key={k} className="pill-btn link">{k}</span>)}</div>}
+          <button type="button" className="pill-btn" onClick={() => setArchived([opened.id], !opened.archived)}>{opened.archived ? "Restore from the archive" : "Archive"}</button>
           {confirmDelete
             ? <button type="button" className="ink" onClick={() => remove(opened)}>Confirm remove</button>
             : <button type="button" className="pill-btn" onClick={() => setConfirmDelete(true)}>Remove from Stash</button>}
@@ -560,6 +590,7 @@ export function Photos() {
                 <Field key={"mp" + round} label="Add to project" value="" list="project-names" placeholder="A project name" onSave={(v) => setProject([...chosen], v, true)} />
                 <Field key={"mq" + round} label="Take out of" value="" list="project-names" placeholder="A project name" onSave={(v) => setProject([...chosen], v, false)} />
               </dl>
+              <button type="button" className="pill-btn" onClick={() => setArchived([...chosen], !inArchive)}>{inArchive ? "Restore these" : "Archive these"}</button>
               <button type="button" className="pill-btn" onClick={() => setChosen(new Set())}>Clear selection</button>
             </>
           )}

@@ -4,12 +4,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 /**
  * One photograph filling the screen on the plain white ground.
+ * Keys: arrows to move, 1 to 5 to rate, 0 to clear, X to archive or restore, I for details, Esc to leave.
  * Zoom: click a spot, pinch on a trackpad, roll a mouse wheel, press + and -, or use the buttons. Drag or swipe to move around.
  * The parent gives this a new key for each photo, so every photo starts fitted to the screen.
  */
-export function BigView({ name, src, note, place, rating, info, canLoad, fetching, onStep, onClose, onInfo, onRate, onLoad }: {
+export function BigView({ name, src, note, place, rating, info, canLoad, fetching, archived, onStep, onClose, onInfo, onRate, onLoad, onArchive }: {
   name: string; src?: string; note: string; place: string; rating: number | null; info: boolean; canLoad: boolean; fetching: boolean;
-  onStep: (by: number) => void; onClose: () => void; onInfo: () => void; onRate: (n: number | null) => void; onLoad: () => void;
+  onStep: (by: number) => void; onClose: () => void; onInfo: () => void; onRate: (n: number | null) => void; onLoad: () => void; archived: boolean; onArchive: () => void;
 }) {
   const [zoom, setZoom] = useState(1); // 1 = the whole picture fits the screen
   const [fitW, setFitW] = useState(0); // the picture's width on screen at zoom 1
@@ -57,12 +58,13 @@ export function BigView({ name, src, note, place, rating, info, canLoad, fetchin
       else if (e.key.toLowerCase() === "i") onInfo();
       else if (e.key === "+" || e.key === "=") zoomTo(zoom * 1.5);
       else if (e.key === "-" || e.key === "_") zoomTo(zoom / 1.5);
+      else if (e.key.toLowerCase() === "x") onArchive();
       else if (/^[0-5]$/.test(e.key)) onRate(e.key === "0" ? null : Number(e.key));
     };
     st.addEventListener("wheel", wheel, { passive: false });
     window.addEventListener("keydown", key, true);
     return () => { st.removeEventListener("wheel", wheel); window.removeEventListener("keydown", key, true); };
-  }, [zoom, zoomTo, onStep, onClose, onInfo, onRate]);
+  }, [zoom, zoomTo, onStep, onClose, onInfo, onRate, onArchive]);
 
   return (
     <div className={"lightbox" + (info ? " with-info" : "")} role="dialog" aria-label={name}>
@@ -93,6 +95,7 @@ export function BigView({ name, src, note, place, rating, info, canLoad, fetchin
       <div className="lb-top">
         <span className="meta">{place}  ·  {name}{note ? "  ·  " + note : ""}</span>
         <span className="lb-actions">
+          <button type="button" className="pill-btn" onClick={onArchive}>{archived ? "Restore" : "Archive"}</button>
           {canLoad && <button type="button" className="pill-btn" disabled={fetching} onClick={onLoad}>{fetching ? "Fetching" : "Load the original"}</button>}
           <button type="button" className={info ? "ink" : "pill-btn"} onClick={onInfo}>Details</button>
           <button type="button" className="pill-btn" onClick={onClose}>Close</button>
