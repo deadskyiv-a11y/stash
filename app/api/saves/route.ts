@@ -25,8 +25,8 @@ export async function POST(req: Request) {
     } catch { /* not an address */ }
   } else if (body?.kind === "note" && typeof body.text === "string" && body.text.trim()) {
     input = { kind: "note", text: body.text.trim().slice(0, 20000) };
-  } else if (body?.kind === "image" && typeof body.path === "string" && body.path.startsWith(`${a.userId}/`)) {
-    input = { kind: "image", path: body.path, name: typeof body.name === "string" ? body.name.slice(0, 120) : undefined };
+  } else if ((body?.kind === "image" || body?.kind === "file") && typeof body.path === "string" && body.path.startsWith(`${a.userId}/`)) {
+    input = { kind: body.kind, path: body.path, name: typeof body.name === "string" ? body.name.slice(0, 120) : undefined };
   }
   if (!input) return Response.json({ error: "Nothing to save." }, { status: 400 });
 

@@ -46,7 +46,7 @@ Tokens are in `app/globals.css` under `:root`.
   repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
 - **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
   `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
-  - Migration `0001_init.sql` is applied. No migration has been added since.
+  - Migrations `0001_init.sql` and `0002_file_path.sql` are applied.
   - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
   - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
   - Site URL and Redirect URLs point at the live address.
@@ -63,7 +63,10 @@ in the repository, never echo it, never commit it.
 ## 4. What the app does now
 
 **Saving**
-- Paste or drop anywhere, or use the Save box. Links, notes and images.
+- Paste or drop anywhere, or use the Save box. Links, notes, images and PDFs (up to 20 MB).
+- A PDF is kept in the bucket as `<user id>/<save id>.pdf` (`file_path` column). The AI reads
+  the PDF itself (up to 15 MB) for title, summary, facts and filing. "Open PDF" in the side
+  panel opens it. It has no picture unless Kofi adds one. No full text is extracted. Untried.
 - iPhone share sheet: an Apple Shortcut on Kofi's phone opens
   `https://stash-gamma-jet.vercel.app/#save=<encoded link>`. The app saves the link on load and
   cleans the address. It rides on the browser's own sign-in, so it opens Stash each time.

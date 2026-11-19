@@ -14,6 +14,7 @@ export type Save = {
   subgroup: string | null;
   facts: { label: string; value: string }[];
   image_path: string | null;
+  file_path: string | null;
   image_w: number | null;
   image_h: number | null;
   is_pale: boolean;
@@ -24,4 +25,4 @@ export type Save = {
 };
 
 export const SAVE_COLUMNS =
-  "id,kind,status,url,site,title,summary,note,tags,cluster,subgroup,facts,image_path,image_w,image_h,is_pale,pinned,created_at";
+  "id,kind,status,url,site,title,summary,note,tags,cluster,subgroup,facts,image_path,file_path,image_w,image_h,is_pale,pinned,created_at";

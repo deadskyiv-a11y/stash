@@ -181,11 +181,11 @@ function Library() {
   const shown = useMemo(() => (hits === null ? saves : saves.filter((s) => hits.has(s.id))), [saves, hits]);
   const opened = open ? saves.find((s) => s.id === open) || null : null;
 
-  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string } | { kind: "image"; path: string; name: string }, label: string) => {
+  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string } | { kind: "image" | "file"; path: string; name: string }, label: string) => {
     const tempId = "temp-" + crypto.randomUUID();
     const temp: Save = {
       id: tempId, kind: body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
-      note: body.kind === "note" ? body.text : null, tags: [], cluster: null, subgroup: null, facts: [], image_path: null, image_w: null, image_h: null,
+      note: body.kind === "note" ? body.text : null, tags: [], cluster: null, subgroup: null, facts: [], image_path: null, file_path: null, image_w: null, image_h: null,
       is_pale: false, pinned: false, created_at: new Date().toISOString(),
     };
     setSaves((s) => [temp, ...s]);
@@ -227,17 +227,18 @@ function Library() {
     const uid = data.user?.id;
     if (!uid) return;
     for (const f of files) {
-      if (!f.type.startsWith("image/")) { say("Only images can be dropped in for now."); continue; }
-      if (f.size > 20 * 1024 * 1024) { say("That image is over 20 MB."); continue; }
+      const isPdf = f.type === "application/pdf" || /\.pdf$/i.test(f.name);
+      if (!f.type.startsWith("image/") && !isPdf) { say("Only images and PDFs can be saved for now."); continue; }
+      if (f.size > 20 * 1024 * 1024) { say("That file is over 20 MB."); continue; }
       const path = `${uid}/upload-${crypto.randomUUID()}`;
-      const { error } = await supabase().storage.from("saves").upload(path, f, { contentType: f.type });
+      const { error } = await supabase().storage.from("saves").upload(path, f, { contentType: isPdf ? "application/pdf" : f.type });
       if (error) { say("Upload failed. " + error.message); continue; }
-      add({ kind: "image", path, name: f.name.replace(/\.[^.]+$/, "") }, f.name);
+      add({ kind: isPdf ? "file" : "image", path, name: f.name.replace(/\.[^.]+$/, "") }, f.name);
     }
   }, [add, say]);
 
   // A link whose site would not hand over a picture takes one from Kofi: paste, drop or choose while it is open.
-  const pictureFor = opened && opened.kind === "link" && !opened.id.startsWith("temp-") ? opened.id : null;
+  const pictureFor = opened && (opened.kind === "link" || opened.kind === "file") && !opened.id.startsWith("temp-") ? opened.id : null;
   const givePicture = useCallback(async (id: string, f: File) => {
     if (!f.type.startsWith("image/")) { say("That is not a picture."); return; }
     if (f.size > 20 * 1024 * 1024) { say("That image is over 20 MB."); return; }
@@ -311,7 +312,8 @@ function Library() {
   const remove = async (s: Save) => {
     const { error } = await supabase().from("saves").delete().eq("id", s.id);
     if (error) { say("Could not delete. " + error.message); return; }
-    if (s.image_path) await supabase().storage.from("saves").remove([s.image_path]);
+    const stored = [s.image_path, s.file_path].filter((x): x is string => !!x);
+    if (stored.length) await supabase().storage.from("saves").remove(stored);
     setSaves((all) => all.filter((x) => x.id !== s.id));
     setOpen(null);
   };
@@ -378,7 +380,7 @@ function Library() {
                   <span className="row-title">{s.title || s.url || "Untitled"}</span>
                   <span className="row-path">{[clusterOf(s), s.subgroup].filter(Boolean).join(" / ")}{s.site ? "  ·  " + s.site : ""}</span>
                 </span>
-                <span className="row-kind">{s.kind === "image" ? "Image" : s.kind === "link" ? "Link" : s.kind === "note" ? "Note" : "File"}</span>
+                <span className="row-kind">{s.kind === "image" ? "Image" : s.kind === "link" ? "Link" : s.kind === "note" ? "Note" : "PDF"}</span>
                 <span className="row-when">{when(s.created_at)}</span>
               </button>
             ))}
@@ -389,7 +391,7 @@ function Library() {
       {loaded && saves.length === 0 && (
         <div className="empty">
           <h2>Nothing saved yet</h2>
-          <p>Paste a link, drop an image, or press Save.</p>
+          <p>Paste a link, drop an image or PDF, or press Save.</p>
         </div>
       )}
 
@@ -431,10 +433,10 @@ function Library() {
           <textarea id="draft" autoFocus rows={3} value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Paste a link or write a note"
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); (e.currentTarget.form as HTMLFormElement).requestSubmit(); } }} />
           <div className="adder-actions">
-            <button type="button" className="pill-btn" onClick={() => file.current?.click()}>Choose image</button>
+            <button type="button" className="pill-btn" onClick={() => file.current?.click()}>Choose image or PDF</button>
             <button type="submit" className="ink">Save</button>
           </div>
-          <input ref={file} type="file" accept="image/*" multiple hidden onChange={(e) => { addFiles([...(e.target.files || [])]); e.target.value = ""; setAdding(false); }} />
+          <input ref={file} type="file" accept="image/*,application/pdf" multiple hidden onChange={(e) => { addFiles([...(e.target.files || [])]); e.target.value = ""; setAdding(false); }} />
         </form>
       )}
 
@@ -467,6 +469,14 @@ function Library() {
           )}
           <h2>{opened.title || "Untitled"}</h2>
           {opened.url && <a href={opened.url} target="_blank" rel="noreferrer">{opened.site || opened.url}</a>}
+          {opened.file_path && (
+            <button type="button" className="pill-btn" onClick={async () => {
+              // Open the tab first, while this is still a tap, or the browser blocks it as a pop-up.
+              const w = window.open("", "_blank");
+              const { data } = await supabase().storage.from("saves").createSignedUrl(opened.file_path!, 300);
+              if (data?.signedUrl && w) w.location.href = data.signedUrl; else { w?.close(); say("Could not open the PDF."); }
+            }}>Open PDF</button>
+          )}
           {opened.summary && <p>{opened.summary}</p>}
           {opened.kind === "note" && opened.note && <p className="note-body">{opened.note}</p>}
           {opened.facts.length > 0 && (
@@ -474,7 +484,7 @@ function Library() {
           )}
           {pictureFor === opened.id && (
             <>
-              {!opened.image_path && <p className="meta">No picture came with this link. Paste or drop a screenshot here to use as its picture.</p>}
+              {!opened.image_path && <p className="meta">No picture came with this. Paste or drop a screenshot here to use as its picture.</p>}
               <button type="button" className="pill-btn" onClick={() => picFile.current?.click()}>{opened.image_path ? "Change picture" : "Add picture"}</button>
               <input ref={picFile} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) givePicture(opened.id, f); e.target.value = ""; }} />
             </>

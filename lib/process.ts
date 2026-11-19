@@ -7,7 +7,8 @@ import { SAVE_COLUMNS, type Save } from "./types";
 export type NewSave =
   | { kind: "link"; url: string; image?: string }
   | { kind: "note"; text: string }
-  | { kind: "image"; path: string; name?: string };
+  | { kind: "image"; path: string; name?: string }
+  | { kind: "file"; path: string; name?: string };
 
 type Picture = { path: string; w: number; h: number; pale: boolean; forAi: Buffer };
 
@@ -99,7 +100,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
   const first: Record<string, string | null> =
     input.kind === "link" ? { kind: "link", url: input.url }
     : input.kind === "note" ? { kind: "note", note: input.text }
-    : { kind: "image", title: input.name || null };
+    : { kind: input.kind, title: input.name || null };
   const { data: row, error } = await a.db.from("saves").insert(first).select("id").single();
   if (error || !row) throw new Error(error?.message || "Could not save");
   const id: string = row.id;
@@ -108,8 +109,22 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     let page: Page | null = null;
     let picture: Picture | null = null;
     let text = "";
+    let filePath: string | null = null;
+    let pdf: Buffer | null = null;
 
-    if (input.kind === "link") {
+    if (input.kind === "file") {
+      const { data: file } = await a.db.storage.from("saves").download(input.path);
+      const buf = file ? Buffer.from(await file.arrayBuffer()) : null;
+      if (!buf || buf.subarray(0, 5).toString("latin1") !== "%PDF-") {
+        await a.db.storage.from("saves").remove([input.path]);
+        throw new Error("Only PDF documents can be saved for now.");
+      }
+      const to = `${a.userId}/${id}.pdf`;
+      const { error: mv } = await a.db.storage.from("saves").move(input.path, to);
+      filePath = mv ? input.path : to;
+      // ponytail: the AI reads the PDF itself, up to 15 MB. No text is extracted for search beyond its summary and facts; add a text extractor if answers need the full wording.
+      if (buf.length <= 15 * 1024 * 1024) pdf = buf;
+    } else if (input.kind === "link") {
       try {
         page = await fetchPage(input.url);
         text = page.text;
@@ -140,16 +155,17 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
       kind: input.kind,
       url: page?.url || (input.kind === "link" ? input.url : null),
       site: page?.site || host,
-      title: page?.title || (input.kind === "image" ? input.name : null),
+      title: page?.title || (input.kind === "image" || input.kind === "file" ? input.name : null),
       description: page?.description,
       text,
       image: picture ? { data: picture.forAi, mediaType: "image/jpeg" } : null,
+      pdf,
       existing: await existingGroups(a),
     });
 
     const title =
       reading?.title || page?.title?.slice(0, 140) ||
-      (input.kind === "note" ? input.text.split("\n")[0].slice(0, 80) : input.kind === "image" ? input.name || "Image" : host) ||
+      (input.kind === "note" ? input.text.split("\n")[0].slice(0, 80) : input.kind === "image" ? input.name || "Image" : input.kind === "file" ? input.name || "Document" : host) ||
       "Untitled";
     const summary = reading?.summary || page?.description || null;
     const tags = reading?.tags || [];
@@ -157,7 +173,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     const subgroup = reading?.subgroup || null;
     const site = page?.site || host;
     const searchText = [title, summary, input.kind === "note" ? input.text : "", tags.join(" "), cluster, subgroup, site,
-      (reading?.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), input.kind].filter(Boolean).join(" ");
+      (reading?.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), input.kind === "file" ? "pdf document file" : input.kind].filter(Boolean).join(" ");
     const embedding = await embed(a, [title, summary, tags.join(", "), cluster, subgroup, text.slice(0, 1200)].filter(Boolean).join(". "));
 
     const { data: done, error: upErr } = await a.db
@@ -168,6 +184,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
         site, title, summary, tags, cluster, subgroup,
         facts: reading?.facts || [],
         image_path: picture?.path || null,
+        file_path: filePath,
         image_w: picture?.w || null,
         image_h: picture?.h || null,
         is_pale: picture?.pale || false,

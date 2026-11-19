@@ -20,7 +20,7 @@ const INSTRUCTIONS = `You file items into a private personal library. Read the i
 
 Rules:
 - title: at most 9 words, plain and specific. Keep a good existing title.
-- summary: at most 2 sentences saying what this is and why someone would keep it. For an image, describe what it shows, including colours, materials and mood, so it can be found by description later.
+- summary: at most 2 sentences saying what this is and why someone would keep it. For an image, describe what it shows, including colours, materials and mood, so it can be found by description later. For a document, say what it is, who it is from and what it is for.
 - tags: 3 to 6 lowercase tags, one or two words each.
 - cluster: the broad SUBJECT the item is about, 1 to 3 words, in Title Case, such as Travel, Food, Design or Business. Never file by format or source: Web Links, Videos, Images, Notes, Instagram and YouTube are not subjects. REUSE one of the existing clusters when its subject fits. Create a new one only when none fits. When you cannot tell what the item is about, use Unsorted.
 - subgroup: a narrower group inside the cluster, 1 to 2 words. REUSE an existing subgroup of that cluster when it fits.
@@ -37,6 +37,7 @@ export async function read(input: {
   description?: string | null;
   text?: string | null;
   image?: { data: Buffer; mediaType: "image/jpeg" | "image/png" | "image/webp" } | null;
+  pdf?: Buffer | null;
   existing: { cluster: string; subgroups: string[] }[];
 }): Promise<Reading | null> {
   if (!aiEnabled()) return null;
@@ -59,6 +60,9 @@ export async function read(input: {
       type: "image",
       source: { type: "base64", media_type: input.image.mediaType, data: input.image.data.toString("base64") },
     });
+  }
+  if (input.pdf) {
+    content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: input.pdf.toString("base64") } });
   }
   content.push({ type: "text", text: `Existing clusters and subgroups:\n${existing}\n\n<item>\n${item}\n</item>` });
 
