@@ -141,7 +141,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     });
 
     const title =
-      reading?.title || page?.title ||
+      reading?.title || page?.title?.slice(0, 140) ||
       (input.kind === "note" ? input.text.split("\n")[0].slice(0, 80) : input.kind === "image" ? input.name || "Image" : host) ||
       "Untitled";
     const summary = reading?.summary || page?.description || null;

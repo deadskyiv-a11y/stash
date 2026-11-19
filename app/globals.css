@@ -93,6 +93,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 
 /* Opened save */
 .detail { position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); background: var(--ground); border-left: 1px solid var(--line); padding: 24px 24px 40px; overflow-y: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; z-index: 5; }
+.detail > * { max-width: 100%; min-width: 0; overflow-wrap: anywhere; } /* a long word or address must wrap, not push past the edge */
 .detail img { width: 100%; height: auto; border-radius: 2px; display: block; }
 .detail img.pale { outline: 1px solid var(--line); }
 .detail h2 { margin: 6px 0 0; font: 500 22px/1.25 var(--tight); letter-spacing: -0.01em; }
