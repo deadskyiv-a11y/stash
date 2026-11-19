@@ -77,6 +77,11 @@ in the repository, never echo it, never commit it.
   bookmarks bar. It opens `/#save=<link>&img=<picture>` in a new tab, passing the page's
   `og:image` or video poster as his own browser saw it. The server uses that picture only when
   it could not get one itself. Untried, and unverified for TikTok.
+- Quotes: with text highlighted on the page, the same button adds `&q=<text>&t=<page title>`.
+  Stash saves that as a note that keeps the page's address as its source. Untried. Kofi must
+  drag the button to his bookmarks bar again after any change to the bookmarklet code.
+- Spotify saves also carry the artist, year and track list, read from Spotify's public embed
+  page (`spotifyDetails` in `lib/fetch-page.ts`). Confirmed by Kofi.
 
 **Pictures for links**
 - Ordinary sites: the page's own preview image.

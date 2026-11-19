@@ -6,7 +6,7 @@ import { SAVE_COLUMNS, type Save } from "./types";
 
 export type NewSave =
   | { kind: "link"; url: string; image?: string }
-  | { kind: "note"; text: string }
+  | { kind: "note"; text: string; url?: string; from?: string } // url and from: a quote, and the page it was taken from
   | { kind: "image"; path: string; name?: string }
   | { kind: "file"; path: string; name?: string; cover?: string };
 
@@ -99,7 +99,7 @@ export async function setPicture(a: Authed, id: string, uploadPath: string): Pro
 export async function createSave(a: Authed, input: NewSave): Promise<Save> {
   const first: Record<string, string | null> =
     input.kind === "link" ? { kind: "link", url: input.url }
-    : input.kind === "note" ? { kind: "note", note: input.text }
+    : input.kind === "note" ? { kind: "note", note: input.text, url: input.url || null }
     : { kind: input.kind, title: input.name || null };
   const { data: row, error } = await a.db.from("saves").insert(first).select("id").single();
   if (error || !row) throw new Error(error?.message || "Could not save");
@@ -156,12 +156,13 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
       text = input.text;
     }
 
-    const host = input.kind === "link" ? new URL(input.url).hostname.replace(/^www\./, "") : null;
+    const source = input.kind === "link" ? input.url : input.kind === "note" ? input.url || null : null;
+    const host = source ? new URL(source).hostname.replace(/^www\./, "") : null;
     const reading: Reading | null = await read({
       kind: input.kind,
-      url: page?.url || (input.kind === "link" ? input.url : null),
+      url: page?.url || source,
       site: page?.site || host,
-      title: page?.title || (input.kind === "image" || input.kind === "file" ? input.name : null),
+      title: page?.title || (input.kind === "image" || input.kind === "file" ? input.name : input.kind === "note" && input.from ? `Quote from: ${input.from}` : null),
       description: page?.description,
       text,
       image: picture ? { data: picture.forAi, mediaType: "image/jpeg" } : null,
@@ -186,7 +187,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
       .from("saves")
       .update({
         status: "ready",
-        url: page?.url || (input.kind === "link" ? input.url : null),
+        url: page?.url || source,
         site, title, summary, tags, cluster, subgroup,
         facts: reading?.facts || [],
         image_path: picture?.path || null,

@@ -25,6 +25,14 @@ export async function POST(req: Request) {
     } catch { /* not an address */ }
   } else if (body?.kind === "note" && typeof body.text === "string" && body.text.trim()) {
     input = { kind: "note", text: body.text.trim().slice(0, 20000) };
+    // A quote taken from a page keeps the page's address and name.
+    try {
+      const u = typeof body.url === "string" ? new URL(body.url) : null;
+      if (u && (u.protocol === "http:" || u.protocol === "https:")) {
+        input.url = u.toString();
+        if (typeof body.from === "string") input.from = body.from.slice(0, 200);
+      }
+    } catch { /* no source */ }
   } else if ((body?.kind === "image" || body?.kind === "file") && typeof body.path === "string" && body.path.startsWith(`${a.userId}/`)) {
     input = { kind: body.kind, path: body.path, name: typeof body.name === "string" ? body.name.slice(0, 120) : undefined };
     if (input.kind === "file" && typeof body.cover === "string" && body.cover.startsWith(`${a.userId}/upload-`)) input.cover = body.cover;

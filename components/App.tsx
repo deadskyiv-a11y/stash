@@ -182,7 +182,7 @@ function Library() {
   const shown = useMemo(() => (hits === null ? saves : saves.filter((s) => hits.has(s.id))), [saves, hits]);
   const opened = open ? saves.find((s) => s.id === open) || null : null;
 
-  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string } | { kind: "image" | "file"; path: string; name: string; cover?: string }, label: string) => {
+  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string; url?: string; from?: string } | { kind: "image" | "file"; path: string; name: string; cover?: string }, label: string) => {
     const tempId = "temp-" + crypto.randomUUID();
     const temp: Save = {
       id: tempId, kind: body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
@@ -218,9 +218,16 @@ function Library() {
     const link = params.get("save");
     if (!link) return;
     const img = params.get("img");
+    const quote = (params.get("q") || "").trim();
+    const from = params.get("t") || undefined;
     const url = looksLikeUrl(link.trim());
     history.replaceState(null, "", window.location.pathname);
-    queueMicrotask(() => (url && img ? add({ kind: "link", url, image: img }, url) : addText(link)));
+    queueMicrotask(() => {
+      // Highlighted text arrives as a quote that remembers its page. Otherwise it is the page itself.
+      if (url && quote) add({ kind: "note", text: quote, url, from }, quote.slice(0, 60));
+      else if (url && img) add({ kind: "link", url, image: img }, url);
+      else addText(link);
+    });
   }, [add, addText]);
 
   const addFiles = useCallback(async (files: File[]) => {
@@ -411,7 +418,7 @@ function Library() {
           {/* The browser button: dragged to the bookmarks bar, it sends the page being viewed, and its picture, to Stash. */}
           {menu && (
             <a className="pill-btn bookmarklet" title="Drag this to your bookmarks bar" draggable
-              ref={(el) => { el?.setAttribute("href", `javascript:(()=>{const q=s=>document.querySelector(s);const i=(q('meta[property="og:image"]')||{}).content||(q('video[poster]')||{}).poster||'';window.open('${window.location.origin}/#save='+encodeURIComponent(location.href)+(i?'&img='+encodeURIComponent(i):''),'_blank')})()`); }}
+              ref={(el) => { el?.setAttribute("href", `javascript:(()=>{const q=s=>document.querySelector(s);const s=String(getSelection()).trim().slice(0,4000);const i=(q('meta[property="og:image"]')||{}).content||(q('video[poster]')||{}).poster||'';window.open('${window.location.origin}/#save='+encodeURIComponent(location.href)+(i?'&img='+encodeURIComponent(i):'')+(s?'&q='+encodeURIComponent(s)+'&t='+encodeURIComponent(document.title.slice(0,200)):''),'_blank')})()`); }}
               onClick={(e) => { e.preventDefault(); say("Drag this button onto your bookmarks bar."); }}>Save to Stash</a>
           )}
         </div>
