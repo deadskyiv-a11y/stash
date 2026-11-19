@@ -59,6 +59,7 @@ export function Photos() {
   const [views, setViews] = useState<Record<string, string>>({});
   const [originals, setOriginals] = useState<Record<string, string>>({});
   const [fetching, setFetching] = useState(false);
+  const stage = useRef<HTMLDivElement>(null);
   const [q, setQ] = useState("");
   const [stars, setStars] = useState(0); // show only photos rated at least this
   const [reading, setReading] = useState(0); // photos the AI still has to look at
@@ -476,7 +477,22 @@ export function Photos() {
         const small = !originals[opened.id] && !opened.view_path;
         return (
           <div className={"lightbox" + (info ? " with-info" : "")} role="dialog" aria-label={opened.name}>
-            <div className={"lb-stage" + (actual ? " actual" : "")} onClick={() => setActual((x) => !x)} title={actual ? "Click to fit the screen" : "Click for real size"}>
+            <div ref={stage} className={"lb-stage" + (actual ? " actual" : "")} title={actual ? "Click to fit the screen" : "Click for real size"}
+              onClick={(e) => {
+                // Going to real size, keep the spot that was clicked in the middle of the screen.
+                const img = stage.current?.querySelector("img");
+                const r = img?.getBoundingClientRect();
+                const fx = r && r.width ? Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) : 0.5;
+                const fy = r && r.height ? Math.min(1, Math.max(0, (e.clientY - r.top) / r.height)) : 0.5;
+                const going = !actual;
+                setActual(going);
+                if (going) requestAnimationFrame(() => {
+                  const s = stage.current, i = s?.querySelector("img");
+                  if (!s || !i) return;
+                  s.scrollLeft = fx * i.offsetWidth - s.clientWidth / 2;
+                  s.scrollTop = fy * i.offsetHeight - s.clientHeight / 2;
+                });
+              }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               {src ? <img key={opened.id} src={src} alt={opened.name} draggable={false} /> : <span className="muted">{opened.name}</span>}
             </div>

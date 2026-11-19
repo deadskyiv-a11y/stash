@@ -109,8 +109,9 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .lightbox.with-info { right: min(420px, 100vw); }
 .lb-stage { position: absolute; inset: 72px 72px 76px; display: flex; align-items: center; justify-content: center; cursor: zoom-in; overflow: hidden; }
 .lb-stage img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; user-select: none; }
-.lb-stage.actual { inset: 72px 0 76px; display: block; overflow: auto; cursor: zoom-out; }
-.lb-stage.actual img { max-width: none; max-height: none; margin: 0 auto; }
+/* Real size: auto margins keep a picture smaller than the screen in the middle, and let a bigger one scroll in every direction. */
+.lb-stage.actual { inset: 72px 0 76px; align-items: flex-start; justify-content: flex-start; overflow: auto; cursor: zoom-out; }
+.lb-stage.actual img { max-width: none; max-height: none; flex: none; margin: auto; }
 .lb-top { position: absolute; left: 28px; right: 28px; top: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .lb-top .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lb-actions { display: flex; gap: 8px; flex: none; }
