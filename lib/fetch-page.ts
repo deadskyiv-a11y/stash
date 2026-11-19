@@ -90,26 +90,44 @@ export type Page = {
   text: string;
 };
 
+// Big platforms hide the picture from servers but publish it on an official oEmbed address.
+const OEMBED: [RegExp, string, string][] = [
+  [/(^|\.)youtube\.com$|^youtu\.be$/, "YouTube", "https://www.youtube.com/oembed?format=json&url="],
+  [/(^|\.)instagram\.com$/, "Instagram", "https://www.instagram.com/api/v1/oembed/?url="],
+  [/(^|\.)vimeo\.com$/, "Vimeo", "https://vimeo.com/api/oembed.json?url="],
+  [/(^|\.)spotify\.com$/, "Spotify", "https://open.spotify.com/oembed?url="],
+];
+
+async function fromOembed(input: string): Promise<Page | null> {
+  const u = new URL(input);
+  const hit = OEMBED.find(([re]) => re.test(u.hostname));
+  if (!hit) return null;
+  try {
+    const o = await safeFetch(hit[2] + encodeURIComponent(input), "application/json", 200_000);
+    const j = JSON.parse(o.body.toString("utf8"));
+    if (!j.thumbnail_url) return null;
+    let imageUrl: string = j.thumbnail_url;
+    if (hit[1] === "YouTube") {
+      // The default YouTube thumbnail is letterboxed; the full-size one has no bars but not every video has it.
+      const big = imageUrl.replace("hqdefault", "maxresdefault");
+      if (await fetch(big, { method: "HEAD", signal: AbortSignal.timeout(5000) }).then((r) => r.ok, () => false)) imageUrl = big;
+    }
+    const by = j.author_name ? `By ${j.author_name}` : null;
+    return { url: input, site: hit[1], title: j.title || null, description: by, imageUrl, text: [j.title, by].filter(Boolean).join(". ") };
+  } catch {
+    return null; // fall back to reading the page itself
+  }
+}
+
 export async function fetchPage(input: string): Promise<Page> {
+  const embedded = await fromOembed(input);
+  if (embedded) return embedded;
   const { res, body, finalUrl } = await safeFetch(input, "text/html,application/xhtml+xml", 2_000_000);
   const u = new URL(finalUrl);
   const site = u.hostname.replace(/^www\./, "");
   const type = res.headers.get("content-type") || "";
   if (type.startsWith("image/")) {
     return { url: finalUrl, site, title: null, description: null, imageUrl: finalUrl, text: "" };
-  }
-  // YouTube shows server visitors a bare page with no title or image; its oEmbed address has both.
-  if (/(^|\.)youtube\.com$|^youtu\.be$/.test(u.hostname)) {
-    try {
-      const o = await safeFetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(finalUrl)}`, "application/json", 100_000);
-      const j = JSON.parse(o.body.toString("utf8"));
-      if (j.thumbnail_url) {
-        // The default thumbnail is letterboxed; the full-size one has no bars but not every video has it.
-        const big = j.thumbnail_url.replace("hqdefault", "maxresdefault");
-        const ok = await fetch(big, { method: "HEAD", signal: AbortSignal.timeout(5000) }).then((r) => r.ok, () => false);
-        return { url: finalUrl, site: "YouTube", title: j.title || null, description: j.author_name ? `Video by ${j.author_name}` : null, imageUrl: ok ? big : j.thumbnail_url, text: [j.title, j.author_name].filter(Boolean).join(". ") };
-      }
-    } catch { /* fall through to the page itself */ }
   }
   const html = body.toString("utf8");
   const titleTag = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
