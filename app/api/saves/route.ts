@@ -1,5 +1,5 @@
 import { authed } from "@/lib/server";
-import { createSave, type NewSave } from "@/lib/process";
+import { createSave, setPicture, type NewSave } from "@/lib/process";
 
 export const maxDuration = 60;
 
@@ -8,6 +8,13 @@ export async function POST(req: Request) {
   if (!a) return Response.json({ error: "Not signed in, or not the owner of this app." }, { status: 401 });
 
   const body = await req.json().catch(() => null);
+  if (body?.kind === "picture" && typeof body.id === "string" && typeof body.path === "string" && body.path.startsWith(`${a.userId}/upload-`)) {
+    try {
+      return Response.json({ save: await setPicture(a, body.id, body.path) });
+    } catch (e) {
+      return Response.json({ error: e instanceof Error ? e.message : "Could not add the picture" }, { status: 500 });
+    }
+  }
   let input: NewSave | null = null;
   if (body?.kind === "link" && typeof body.url === "string") {
     try {

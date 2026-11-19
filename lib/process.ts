@@ -56,6 +56,23 @@ async function existingGroups(a: Authed) {
   return [...map.entries()].map(([cluster, s]) => ({ cluster, subgroups: [...s] }));
 }
 
+/** Gives an existing save the picture Kofi supplied, for links whose site would not hand one over. */
+export async function setPicture(a: Authed, id: string, uploadPath: string): Promise<Save> {
+  const { data: file } = await a.db.storage.from("saves").download(uploadPath);
+  if (!file) throw new Error("Could not read the picture");
+  const picture = await storePicture(a, id, Buffer.from(await file.arrayBuffer()), 1600);
+  await a.db.storage.from("saves").remove([uploadPath]);
+  if (!picture) throw new Error("Could not use that picture");
+  const { data, error } = await a.db
+    .from("saves")
+    .update({ image_path: picture.path, image_w: picture.w, image_h: picture.h, is_pale: picture.pale })
+    .eq("id", id)
+    .select(SAVE_COLUMNS)
+    .single();
+  if (error || !data) throw new Error(error?.message || "Could not update the save");
+  return data as unknown as Save;
+}
+
 export async function createSave(a: Authed, input: NewSave): Promise<Save> {
   const first: Record<string, string | null> =
     input.kind === "link" ? { kind: "link", url: input.url }

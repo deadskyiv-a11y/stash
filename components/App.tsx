@@ -109,6 +109,7 @@ function Library() {
   const canvas = useRef<CanvasHandle>(null);
   const box = useRef<HTMLInputElement>(null);
   const file = useRef<HTMLInputElement>(null);
+  const picFile = useRef<HTMLInputElement>(null);
   const signed = useRef(new Set<string>());
   const [now] = useState(() => Date.now());
 
@@ -217,13 +218,37 @@ function Library() {
     }
   }, [add, say]);
 
+  // A link whose site would not hand over a picture takes one from Kofi: paste, drop or choose while it is open.
+  const pictureFor = opened && opened.kind === "link" && !opened.id.startsWith("temp-") ? opened.id : null;
+  const givePicture = useCallback(async (id: string, f: File) => {
+    if (!f.type.startsWith("image/")) { say("That is not a picture."); return; }
+    if (f.size > 20 * 1024 * 1024) { say("That image is over 20 MB."); return; }
+    const { data } = await supabase().auth.getUser();
+    const uid = data.user?.id;
+    if (!uid) return;
+    setToast("Adding the picture");
+    const path = `${uid}/upload-${crypto.randomUUID()}`;
+    const { error } = await supabase().storage.from("saves").upload(path, f, { contentType: f.type });
+    if (error) { say("Upload failed. " + error.message); return; }
+    try {
+      const r = await api<{ save: Save }>("/api/saves", { kind: "picture", id, path });
+      const p = r.save.image_path;
+      // The picture may reuse the old file name, so sign it afresh rather than show the cached old one.
+      if (p) { signed.current.delete(p); setUrls((u) => { const n = { ...u }; delete n[p]; return n; }); }
+      setSaves((s) => s.map((x) => (x.id === id ? r.save : x)));
+      say("Picture added");
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Could not add the picture");
+    }
+  }, [say]);
+
   // Paste anywhere, drop anywhere, Cmd+K for the box, Esc to clear.
   useEffect(() => {
     const typing = () => { const a = document.activeElement; return a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement; };
     const onPaste = (e: ClipboardEvent) => {
       if (typing()) return;
       const files = [...(e.clipboardData?.files || [])];
-      if (files.length) { e.preventDefault(); addFiles(files); return; }
+      if (files.length) { e.preventDefault(); if (pictureFor) givePicture(pictureFor, files[0]); else addFiles(files); return; }
       const text = e.clipboardData?.getData("text/plain");
       if (text) { e.preventDefault(); addText(text); }
     };
@@ -235,7 +260,7 @@ function Library() {
     const onDrop = (e: DragEvent) => {
       e.preventDefault();
       const files = [...(e.dataTransfer?.files || [])];
-      if (files.length) { addFiles(files); return; }
+      if (files.length) { if (pictureFor) givePicture(pictureFor, files[0]); else addFiles(files); return; }
       const text = e.dataTransfer?.getData("text/uri-list") || e.dataTransfer?.getData("text/plain");
       if (text) addText(text.split("\n")[0]);
     };
@@ -249,7 +274,7 @@ function Library() {
       window.removeEventListener("dragover", onDragOver);
       window.removeEventListener("drop", onDrop);
     };
-  }, [addFiles, addText]);
+  }, [addFiles, addText, pictureFor, givePicture]);
 
   const remove = async (s: Save) => {
     const { error } = await supabase().from("saves").delete().eq("id", s.id);
@@ -359,6 +384,13 @@ function Library() {
           {opened.kind === "note" && opened.note && <p className="note-body">{opened.note}</p>}
           {opened.facts.length > 0 && (
             <dl>{opened.facts.map((f, i) => (<div key={i}><dt>{f.label}</dt><dd>{f.value}</dd></div>))}</dl>
+          )}
+          {pictureFor === opened.id && (
+            <>
+              {!opened.image_path && <p className="meta">No picture came with this link. Paste or drop a screenshot here to use as its picture.</p>}
+              <button type="button" className="pill-btn" onClick={() => picFile.current?.click()}>{opened.image_path ? "Change picture" : "Add picture"}</button>
+              <input ref={picFile} type="file" accept="image/*" hidden onChange={(e) => { const f = e.target.files?.[0]; if (f) givePicture(opened.id, f); e.target.value = ""; }} />
+            </>
           )}
           {opened.tags.length > 0 && (
             <div className="tags">{opened.tags.map((t) => (<button key={t} type="button" className="pill-btn" onClick={() => { setQ(t); setPick(null); setOpen(null); }}>{t}</button>))}</div>
