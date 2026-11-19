@@ -8,7 +8,7 @@ export type NewSave =
   | { kind: "link"; url: string; image?: string }
   | { kind: "note"; text: string }
   | { kind: "image"; path: string; name?: string }
-  | { kind: "file"; path: string; name?: string };
+  | { kind: "file"; path: string; name?: string; cover?: string };
 
 type Picture = { path: string; w: number; h: number; pale: boolean; forAi: Buffer };
 
@@ -124,6 +124,12 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
       filePath = mv ? input.path : to;
       // ponytail: the AI reads the PDF itself, up to 15 MB. No text is extracted for search beyond its summary and facts; add a text extractor if answers need the full wording.
       if (buf.length <= 15 * 1024 * 1024) pdf = buf;
+      // The browser drew the first page and uploaded it. Keep it as the tile picture.
+      if (input.cover) {
+        const { data: c } = await a.db.storage.from("saves").download(input.cover);
+        if (c) picture = await storePicture(a, id, Buffer.from(await c.arrayBuffer()), 900);
+        await a.db.storage.from("saves").remove([input.cover]);
+      }
     } else if (input.kind === "link") {
       try {
         page = await fetchPage(input.url);

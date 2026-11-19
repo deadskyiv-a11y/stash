@@ -27,6 +27,7 @@ export async function POST(req: Request) {
     input = { kind: "note", text: body.text.trim().slice(0, 20000) };
   } else if ((body?.kind === "image" || body?.kind === "file") && typeof body.path === "string" && body.path.startsWith(`${a.userId}/`)) {
     input = { kind: body.kind, path: body.path, name: typeof body.name === "string" ? body.name.slice(0, 120) : undefined };
+    if (input.kind === "file" && typeof body.cover === "string" && body.cover.startsWith(`${a.userId}/upload-`)) input.cover = body.cover;
   }
   if (!input) return Response.json({ error: "Nothing to save." }, { status: 400 });
 

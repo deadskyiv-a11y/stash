@@ -66,7 +66,9 @@ in the repository, never echo it, never commit it.
 - Paste or drop anywhere, or use the Save box. Links, notes, images and PDFs (up to 20 MB).
 - A PDF is kept in the bucket as `<user id>/<save id>.pdf` (`file_path` column). The AI reads
   the PDF itself (up to 15 MB) for title, summary, facts and filing. "Open PDF" in the side
-  panel opens it. It has no picture unless Kofi adds one. No full text is extracted. Untried.
+  panel opens it. Its tile shows the first page: the browser draws it with `pdfjs-dist`
+  (`lib/pdf-cover.ts`) and uploads it with the save. No full text is extracted.
+  Saving and opening are confirmed by Kofi. The cover is tested only on this Mac.
 - iPhone share sheet: an Apple Shortcut on Kofi's phone opens
   `https://stash-gamma-jet.vercel.app/#save=<encoded link>`. The app saves the link on load and
   cleans the address. It rides on the browser's own sign-in, so it opens Stash each time.

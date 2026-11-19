@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { api, supabase } from "@/lib/supabase-browser";
 import { SAVE_COLUMNS, type Kind, type Save } from "@/lib/types";
+import { pdfCover } from "@/lib/pdf-cover";
 import { clusterOf, computeLayout, type Label } from "@/lib/layout";
 import { Canvas, type CanvasHandle } from "./Canvas";
 import { Logo } from "./Logo";
@@ -181,7 +182,7 @@ function Library() {
   const shown = useMemo(() => (hits === null ? saves : saves.filter((s) => hits.has(s.id))), [saves, hits]);
   const opened = open ? saves.find((s) => s.id === open) || null : null;
 
-  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string } | { kind: "image" | "file"; path: string; name: string }, label: string) => {
+  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string } | { kind: "image" | "file"; path: string; name: string; cover?: string }, label: string) => {
     const tempId = "temp-" + crypto.randomUUID();
     const temp: Save = {
       id: tempId, kind: body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
@@ -233,7 +234,15 @@ function Library() {
       const path = `${uid}/upload-${crypto.randomUUID()}`;
       const { error } = await supabase().storage.from("saves").upload(path, f, { contentType: isPdf ? "application/pdf" : f.type });
       if (error) { say("Upload failed. " + error.message); continue; }
-      add({ kind: isPdf ? "file" : "image", path, name: f.name.replace(/\.[^.]+$/, "") }, f.name);
+      // A PDF's tile shows its first page, drawn here in the browser. Without it the save still works.
+      let cover: string | undefined;
+      const page1 = isPdf ? await pdfCover(f) : null;
+      if (page1) {
+        cover = `${uid}/upload-${crypto.randomUUID()}`;
+        const up = await supabase().storage.from("saves").upload(cover, page1, { contentType: "image/jpeg" });
+        if (up.error) cover = undefined;
+      }
+      add({ kind: isPdf ? "file" : "image", cover, path, name: f.name.replace(/\.[^.]+$/, "") }, f.name);
     }
   }, [add, say]);
 
