@@ -132,11 +132,13 @@ async function fromOembed(input: string): Promise<Page | null> {
       const big = imageUrl.replace("hqdefault", "maxresdefault");
       if (await fetch(big, { method: "HEAD", signal: AbortSignal.timeout(5000) }).then((r) => r.ok, () => false)) imageUrl = big;
     }
-    const by = j.author_name ? `By ${j.author_name}` : null;
+    const spotify = hit[1] === "Spotify" ? await spotifyDetails(u) : null;
+    const author = j.author_name || spotify?.artist;
+    const by = author ? `By ${author}` : null;
     // Instagram's "title" is the whole caption. Keep its first line as the title and the rest as text.
     const caption: string = typeof j.title === "string" ? j.title : "";
     const title = caption.split("\n")[0].slice(0, 120) || null;
-    return { url: input, site: hit[1], title, description: by, imageUrl, text: [caption, by].filter(Boolean).join(". ") };
+    return { url: input, site: hit[1], title, description: by, imageUrl, text: [caption, by, ...(spotify?.lines || [])].filter(Boolean).join(". ") };
   } catch {
     return null; // fall back to reading the page itself
   }
