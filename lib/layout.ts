@@ -20,6 +20,7 @@ const MEDIA_SITES = /youtube|youtu\.be|instagram|tiktok|vimeo|spotify|imdb/i;
 export function isArticle(s: Save): boolean {
   if (s.kind !== "link") return false;
   return s.form ? s.form === "article" : !MEDIA_SITES.test(s.site || "");
+  // A recipe keeps its bare picture: the dish is the point, and the recipe is in the panel.
 }
 
 /** A quote is a note taken from a page, so it knows its source. A typed note has none. */

@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { fetchImage, fetchPage, type Page } from "./fetch-page";
-import { read, type Reading } from "./ai";
+import { read, recipeFor, type Reading } from "./ai";
 import { embed, type Authed } from "./server";
 import { SAVE_COLUMNS, type Save } from "./types";
 import { audioExt, transcribe } from "./transcribe";
@@ -85,6 +85,7 @@ export async function setPicture(a: Authed, id: string, uploadPath: string): Pro
       // Pinned saves stay where Kofi put them.
       ...(row?.pinned ? {} : { cluster: reading.cluster || row?.cluster, subgroup: reading.subgroup || null }),
       facts: reading.facts || [], search_text: searchText,
+      ...(reading.recipe ? { recipe: reading.recipe, form: "recipe" } : {}),
       ...(embedding ? { embedding: JSON.stringify(embedding) } : {}),
     });
   }
@@ -95,6 +96,27 @@ export async function setPicture(a: Authed, id: string, uploadPath: string): Pro
     .select(SAVE_COLUMNS)
     .single();
   if (error || !data) throw new Error(error?.message || "Could not update the save");
+  return data as unknown as Save;
+}
+
+/** Writes out the recipe for a save already made, when Kofi asks for it. Uses what was captured at the time, and the save's picture. */
+export async function makeRecipe(a: Authed, id: string): Promise<Save> {
+  const { data: row } = await a.db.from("saves").select("title,summary,site,content,note,image_path,search_text").eq("id", id).single();
+  if (!row) throw new Error("Could not find that save");
+  let image: Buffer | null = null;
+  if (row.image_path) {
+    const { data: file } = await a.db.storage.from("saves").download(row.image_path);
+    if (file) image = await sharp(Buffer.from(await file.arrayBuffer())).resize({ width: 768, height: 768, fit: "inside", withoutEnlargement: true }).jpeg({ quality: 72 }).toBuffer().catch(() => null);
+  }
+  const recipe = await recipeFor({ title: row.title, summary: row.summary, site: row.site, text: row.content || row.note, image });
+  if (!recipe) throw new Error("Could not work out a recipe from this save.");
+  const { data, error } = await a.db
+    .from("saves")
+    .update({ recipe, form: "recipe", search_text: [row.search_text, "recipe", recipe.dish, recipe.ingredients.map((i) => i.item).join(" ")].filter(Boolean).join(" ") })
+    .eq("id", id)
+    .select(SAVE_COLUMNS)
+    .single();
+  if (error || !data) throw new Error(error?.message || "Could not save the recipe");
   return data as unknown as Save;
 }
 
@@ -193,7 +215,8 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     const subgroup = reading?.subgroup || null;
     const site = page?.site || host;
     const searchText = [title, summary, input.kind === "note" ? input.text : voice ? text : "", tags.join(" "), cluster, subgroup, site,
-      (reading?.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), input.kind === "file" ? "pdf document file" : voice ? "voice note recording" : input.kind].filter(Boolean).join(" ");
+      (reading?.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), input.kind === "file" ? "pdf document file" : voice ? "voice note recording" : input.kind,
+      reading?.recipe ? "recipe " + reading.recipe.ingredients.map((i) => i.item).join(" ") : ""].filter(Boolean).join(" ");
     const embedding = await embed(a, [title, summary, tags.join(", "), cluster, subgroup, text.slice(0, 1200)].filter(Boolean).join(". "));
 
     const { data: done, error: upErr } = await a.db
@@ -209,6 +232,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
         image_h: picture?.h || null,
         is_pale: picture?.pale || false,
         form: voice ? "voice" : reading?.form || null,
+        recipe: reading?.recipe || null,
         ...(voice ? { note: text || null } : {}),
         excerpt: page?.description ? page.description.slice(0, 300) : null,
         content: text ? text.slice(0, 6000) : null,

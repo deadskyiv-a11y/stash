@@ -46,7 +46,7 @@ Tokens are in `app/globals.css` under `:root`.
   repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
 - **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
   `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
-  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql`, `0006_photo_tags.sql` and `0007_photo_projects.sql` are applied.
+  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql`, `0006_photo_tags.sql`, `0007_photo_projects.sql` and `0008_save_recipe.sql` are applied.
   - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
   - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
   - Site URL and Redirect URLs point at the live address.
@@ -109,6 +109,20 @@ in the repository, never echo it, never commit it.
 - Sub-groups show only once a group has 6 or more saves, and only for sub-groups of 2 or more.
   This is a display rule in `lib/layout.ts`. The stored sub-group is never rewritten by it.
 - A new save sits under "Inbox" while it is read, then travels to its group (0.8 seconds).
+
+**Recipes**
+- When a save is about cooking a dish, the AI sets `form` to `recipe` and writes the recipe into
+  the `recipe` column: dish, serves, time, ingredients with amounts, numbered steps. The panel
+  shows it under the picture. `RECIPE_RULES` and `parseRecipe` in `lib/ai.ts`.
+- **The AI does not watch the video.** It has the caption or description and the cover picture.
+  It keeps what the post gives and fills gaps from its own knowledge of the dish. `basis` records
+  which: `post` or `ai`, and the panel says so plainly. Do not remove that line.
+- Instagram captions often hold the whole recipe. YouTube gives only a title through oEmbed, and
+  TikTok gives nothing, so those are mostly the AI's own version. The YouTube Data API (free
+  key, his existing Google Cloud project) would give video descriptions. Offered, not built.
+- "Write out the recipe" appears on a food-related save with no recipe, for older saves or ones
+  the AI did not spot (`makeRecipe` in `lib/process.ts`).
+- Untried on the live site.
 
 **Voice notes**
 - "Record" in the Save box (New note on the phone) records in the browser. Audio files can also

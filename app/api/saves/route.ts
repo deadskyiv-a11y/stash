@@ -1,5 +1,5 @@
 import { authed } from "@/lib/server";
-import { createSave, setPicture, type NewSave } from "@/lib/process";
+import { createSave, makeRecipe, setPicture, type NewSave } from "@/lib/process";
 
 export const maxDuration = 60;
 
@@ -13,6 +13,13 @@ export async function POST(req: Request) {
       return Response.json({ save: await setPicture(a, body.id, body.path) });
     } catch (e) {
       return Response.json({ error: e instanceof Error ? e.message : "Could not add the picture" }, { status: 500 });
+    }
+  }
+  if (body?.kind === "recipe" && typeof body.id === "string") {
+    try {
+      return Response.json({ save: await makeRecipe(a, body.id) });
+    } catch (e) {
+      return Response.json({ error: e instanceof Error ? e.message : "Could not work out the recipe" }, { status: 500 });
     }
   }
   let input: NewSave | null = null;

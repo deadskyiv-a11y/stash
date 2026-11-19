@@ -200,7 +200,7 @@ function Library() {
     const temp: Save = {
       id: tempId, kind: body.kind === "voice" ? "note" : body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
       note: body.kind === "note" ? body.text : null, tags: [], cluster: null, subgroup: null, facts: [], image_path: null, file_path: null, image_w: null, image_h: null,
-      is_pale: false, pinned: false, form: null, excerpt: null, created_at: new Date().toISOString(),
+      is_pale: false, pinned: false, form: null, excerpt: null, recipe: null, created_at: new Date().toISOString(),
     };
     setSaves((s) => [temp, ...s]);
     try {
@@ -413,6 +413,21 @@ function Library() {
     }
   };
 
+  // For a save made before recipes existed, or one the AI did not spot as cooking.
+  const [cooking, setCooking] = useState(false);
+  const getRecipe = async (s: Save) => {
+    setCooking(true);
+    setToast("Writing out the recipe");
+    try {
+      const r = await api<{ save: Save }>("/api/saves", { kind: "recipe", id: s.id });
+      setSaves((all) => all.map((x) => (x.id === s.id ? { ...r.save, _key: x._key } : x)));
+      say("Recipe added");
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Could not work out the recipe");
+    }
+    setCooking(false);
+  };
+
   const reset = () => { setQ(""); setType("all"); setRecent(false); setPick(null); canvas.current?.refit(); };
   const filtering = hits !== null;
   const status = !loaded ? "" : !filtering ? `${saves.length} ${saves.length === 1 ? "save" : "saves"}` : hits!.size === 0 ? "No match" : `${hits!.size} of ${saves.length}`;
@@ -439,7 +454,7 @@ function Library() {
                   <span className="row-title">{s.title || s.url || "Untitled"}</span>
                   <span className="row-path">{[clusterOf(s), s.subgroup].filter(Boolean).join(" / ")}{s.site ? "  ·  " + s.site : ""}</span>
                 </span>
-                <span className="row-kind">{s.kind === "image" ? "Image" : s.kind === "link" ? "Link" : isQuote(s) ? "Quote" : s.form === "voice" ? "Voice" : s.kind === "note" ? "Note" : "PDF"}</span>
+                <span className="row-kind">{s.kind === "image" ? "Image" : s.kind === "link" ? "Link" : isQuote(s) ? "Quote" : s.form === "recipe" ? "Recipe" : s.form === "voice" ? "Voice" : s.kind === "note" ? "Note" : "PDF"}</span>
                 <span className="row-when">{when(s.created_at)}</span>
               </button>
             ))}
@@ -556,6 +571,22 @@ function Library() {
               </div>
             );
           })()}
+          {opened.recipe && (
+            <section className="recipe" aria-label="Recipe">
+              <h3>{opened.recipe.dish || "Recipe"}</h3>
+              <p className="meta">{[opened.recipe.serves && "Serves " + opened.recipe.serves.replace(/^serves\s*/i, ""), opened.recipe.time].filter(Boolean).join("  ·  ")}</p>
+              <h4>Ingredients</h4>
+              <ul>{opened.recipe.ingredients.map((i, n) => <li key={n}><span>{i.amount}</span>{i.item}</li>)}</ul>
+              <h4>Method</h4>
+              <ol>{opened.recipe.steps.map((s, n) => <li key={n}>{s}</li>)}</ol>
+              <p className="meta">{opened.recipe.basis === "post"
+                ? "Taken from what the post itself says."
+                : "The post did not give the full recipe, so the AI filled in the gaps from its own knowledge of the dish. It has not watched the video. Check the amounts before you cook."}</p>
+            </section>
+          )}
+          {!opened.recipe && !opened.id.startsWith("temp-") && /food|recipe|cook|bak|dish|meal|kitchen|cuisine/i.test([opened.title, opened.cluster, opened.subgroup, opened.tags.join(" ")].join(" ")) && (
+            <button type="button" className="pill-btn" disabled={cooking} onClick={() => getRecipe(opened)}>Write out the recipe</button>
+          )}
           {opened.facts.length > 0 && (
             <dl>{opened.facts.map((f, i) => (<div key={i}><dt>{f.label}</dt><dd>{f.value}</dd></div>))}</dl>
           )}
