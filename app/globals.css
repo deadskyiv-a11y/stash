@@ -60,6 +60,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .save { min-width: 120px; margin-left: auto; flex: 0 0 auto; }
 .brand + .command { margin: 0 auto; }
 .phone { display: none; }
+.bookmarklet { display: inline-flex; align-items: center; text-decoration: none; color: inherit; cursor: grab; }
 .pill-btn { min-height: 44px; padding: 0 16px; border-radius: 999px; background: var(--control); font: 500 14px var(--sans); }
 
 /* Bottom controls */
@@ -141,6 +142,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   .brand + .command { margin: 0; }
   .save { display: none; } /* the phone gets Paste and New note instead */
   .phone { display: block; }
+  .bookmarklet { display: none; }
   .top .pill-btn.phone { margin-left: auto; }
   .adder { right: 16px; top: 128px; width: calc(100vw - 32px); }
   .answer { top: 128px; width: calc(100vw - 32px); }

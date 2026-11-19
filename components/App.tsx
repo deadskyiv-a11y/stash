@@ -181,7 +181,7 @@ function Library() {
   const shown = useMemo(() => (hits === null ? saves : saves.filter((s) => hits.has(s.id))), [saves, hits]);
   const opened = open ? saves.find((s) => s.id === open) || null : null;
 
-  const add = useCallback(async (body: { kind: "link"; url: string } | { kind: "note"; text: string } | { kind: "image"; path: string; name: string }, label: string) => {
+  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string } | { kind: "image"; path: string; name: string }, label: string) => {
     const tempId = "temp-" + crypto.randomUUID();
     const temp: Save = {
       id: tempId, kind: body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
@@ -213,11 +213,14 @@ function Library() {
   useEffect(() => {
     if (shared.current) return;
     shared.current = true;
-    const link = new URLSearchParams(window.location.hash.slice(1)).get("save");
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    const link = params.get("save");
     if (!link) return;
+    const img = params.get("img");
+    const url = looksLikeUrl(link.trim());
     history.replaceState(null, "", window.location.pathname);
-    queueMicrotask(() => addText(link));
-  }, [addText]);
+    queueMicrotask(() => (url && img ? add({ kind: "link", url, image: img }, url) : addText(link)));
+  }, [add, addText]);
 
   const addFiles = useCallback(async (files: File[]) => {
     const { data } = await supabase().auth.getUser();
@@ -394,6 +397,12 @@ function Library() {
         <div className="brand">
           <button type="button" className="plain" onClick={() => setMenu((m) => !m)} aria-expanded={menu} aria-label={NAME + " menu"}><Logo height={24} title={NAME} /></button>
           {menu && <button type="button" className="pill-btn" onClick={() => supabase().auth.signOut()}>Sign out</button>}
+          {/* The browser button: dragged to the bookmarks bar, it sends the page being viewed, and its picture, to Stash. */}
+          {menu && (
+            <a className="pill-btn bookmarklet" title="Drag this to your bookmarks bar" draggable
+              ref={(el) => { el?.setAttribute("href", `javascript:(()=>{const q=s=>document.querySelector(s);const i=(q('meta[property="og:image"]')||{}).content||(q('video[poster]')||{}).poster||'';window.open('${window.location.origin}/#save='+encodeURIComponent(location.href)+(i?'&img='+encodeURIComponent(i):''),'_blank')})()`); }}
+              onClick={(e) => { e.preventDefault(); say("Drag this button onto your bookmarks bar."); }}>Save to Stash</a>
+          )}
         </div>
         <div className="command">
           <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>

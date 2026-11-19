@@ -5,7 +5,7 @@ import { embed, type Authed } from "./server";
 import { SAVE_COLUMNS, type Save } from "./types";
 
 export type NewSave =
-  | { kind: "link"; url: string }
+  | { kind: "link"; url: string; image?: string }
   | { kind: "note"; text: string }
   | { kind: "image"; path: string; name?: string };
 
@@ -119,6 +119,11 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
         }
       } catch (e) {
         console.error("Page fetch failed", e);
+      }
+      // The browser button passes the picture Kofi's own browser saw, for sites that hide it from servers.
+      if (!picture && input.image) {
+        const raw = await fetchImage(input.image);
+        if (raw) picture = await storePicture(a, id, raw, 900);
       }
     } else if (input.kind === "image") {
       const { data: file } = await a.db.storage.from("saves").download(input.path);

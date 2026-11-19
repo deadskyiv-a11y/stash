@@ -19,7 +19,9 @@ export async function POST(req: Request) {
   if (body?.kind === "link" && typeof body.url === "string") {
     try {
       const u = new URL(body.url.trim());
-      if (u.protocol === "http:" || u.protocol === "https:") input = { kind: "link", url: u.toString() };
+      if (u.protocol === "http:" || u.protocol === "https:") {
+        input = { kind: "link", url: u.toString(), image: typeof body.image === "string" && /^https?:\/\//.test(body.image) ? body.image.slice(0, 2000) : undefined };
+      }
     } catch { /* not an address */ }
   } else if (body?.kind === "note" && typeof body.text === "string" && body.text.trim()) {
     input = { kind: "note", text: body.text.trim().slice(0, 20000) };

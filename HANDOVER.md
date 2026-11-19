@@ -68,6 +68,11 @@ in the repository, never echo it, never commit it.
   `https://stash-gamma-jet.vercel.app/#save=<encoded link>`. The app saves the link on load and
   cleans the address. It rides on the browser's own sign-in, so it opens Stash each time.
 
+- Laptop browser button: "Save to Stash" in the logo menu is a bookmarklet Kofi drags to his
+  bookmarks bar. It opens `/#save=<link>&img=<picture>` in a new tab, passing the page's
+  `og:image` or video poster as his own browser saw it. The server uses that picture only when
+  it could not get one itself. Untried, and unverified for TikTok.
+
 **Pictures for links**
 - Ordinary sites: the page's own preview image.
 - YouTube, Instagram, Vimeo, Spotify: each platform's official oEmbed address, tried before the
@@ -162,7 +167,6 @@ account: no saves seen, no files seen, inserts and updates blocked.
    swipe pans). Kofi has not said whether he is happy with it.
 7. **Supabase advisor warning** on `public.is_owner()`. Intended. It returns only whether the
    caller is on the owner list.
-8. Spec item never built: a browser button for saving on the desktop.
 
 ## 8. How the code is laid out
 
