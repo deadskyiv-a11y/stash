@@ -218,6 +218,14 @@ account: no saves seen, no files seen, inserts and updates blocked.
 
 ## 6. Things that bit us
 
+- **An empty AI reply means the model ran out of room.** `claude-haiku-5-5` thinks before it
+  answers, and thinking counts against `max_tokens`. With a tight cap the reply stops before any
+  text, and the code sees "Unexpected end of JSON input". Three of Kofi's first 13 photos failed
+  this way, and the unsorted French reel earlier was almost certainly the same fault. Every call
+  in `lib/ai.ts` now sets `output_config: { effort: "low" }` and a roomy `max_tokens`. Do not
+  tighten those caps to save money; output is billed by what is used, not by the cap.
+- The Vercel MCP tool `get_runtime_logs` does show function errors, where the CLI showed nothing.
+
 - **Sign-in emails are capped at about 2 an hour.** Supabase's built-in mailer is shared and
   rate-limited. Do not request sign-in emails to test. The fix, if Kofi ever wants it, is a
   proper email service (Resend) with a verified domain. He was advised to skip it for now.

@@ -11,6 +11,9 @@ export type Reading = {
 };
 
 const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-5-5";
+// This model thinks before it answers, and the thinking counts against max_tokens. A cap sized only for
+// the answer can be used up before any answer is written, which shows up as an empty reply. So every call
+// below asks for low effort (short thinking, right for filing and tagging) and leaves room in max_tokens.
 
 export function aiEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -71,7 +74,8 @@ export async function read(input: {
   try {
     const msg = await client.messages.create({
       model: MODEL,
-      max_tokens: 1200,
+      max_tokens: 4000,
+      output_config: { effort: "low" },
       system: INSTRUCTIONS,
       messages: [{ role: "user", content }],
     });
@@ -121,7 +125,8 @@ export async function tidy(
   try {
     const msg = await new Anthropic().messages.create({
       model: MODEL,
-      max_tokens: 6000,
+      max_tokens: 10000,
+      output_config: { effort: "low" },
       system: TIDY,
       messages: [{ role: "user", content: `<items>\n${lines.join("\n")}\n</items>` }],
     });
@@ -167,7 +172,8 @@ export async function answer(
   try {
     const msg = await new Anthropic().messages.create({
       model: MODEL,
-      max_tokens: 500,
+      max_tokens: 2500,
+      output_config: { effort: "low" },
       system: ANSWER,
       messages: [{ role: "user", content: `<saves>\n${blocks.join("\n\n")}\n</saves>\n\nQuestion: ${q}` }],
     });
@@ -198,7 +204,8 @@ export async function tagPhoto(image: Buffer, subjects: string[], place: string 
   try {
     const msg = await new Anthropic().messages.create({
       model: MODEL,
-      max_tokens: 400,
+      max_tokens: 2500,
+      output_config: { effort: "low" },
       system: PHOTO,
       messages: [{
         role: "user",
