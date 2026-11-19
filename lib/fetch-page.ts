@@ -98,6 +98,19 @@ export async function fetchPage(input: string): Promise<Page> {
   if (type.startsWith("image/")) {
     return { url: finalUrl, site, title: null, description: null, imageUrl: finalUrl, text: "" };
   }
+  // YouTube shows server visitors a bare page with no title or image; its oEmbed address has both.
+  if (/(^|\.)youtube\.com$|^youtu\.be$/.test(u.hostname)) {
+    try {
+      const o = await safeFetch(`https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(finalUrl)}`, "application/json", 100_000);
+      const j = JSON.parse(o.body.toString("utf8"));
+      if (j.thumbnail_url) {
+        // The default thumbnail is letterboxed; the full-size one has no bars but not every video has it.
+        const big = j.thumbnail_url.replace("hqdefault", "maxresdefault");
+        const ok = await fetch(big, { method: "HEAD", signal: AbortSignal.timeout(5000) }).then((r) => r.ok, () => false);
+        return { url: finalUrl, site: "YouTube", title: j.title || null, description: j.author_name ? `Video by ${j.author_name}` : null, imageUrl: ok ? big : j.thumbnail_url, text: [j.title, j.author_name].filter(Boolean).join(". ") };
+      }
+    } catch { /* fall through to the page itself */ }
+  }
   const html = body.toString("utf8");
   const titleTag = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
   const image = meta(html, ["og:image:secure_url", "og:image", "twitter:image", "twitter:image:src"]);
