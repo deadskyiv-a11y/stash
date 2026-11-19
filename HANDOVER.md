@@ -1,15 +1,19 @@
-# Stash: handover to Claude Code
+# Stash: handover
 
-Written 19 November 2026 by Claude (chat session) for Claude Code running on Kofi's Mac.
+Rewritten 19 November 2026 by Claude Code at the end of the day Stash went live.
 Read this whole file before doing anything.
 
-## 1. Your job, in order
+## 1. Where things stand
 
-1. **Deploy the app to Vercel.** This is the only thing blocking a live app. See section 4.
-2. **Set the Supabase Site URL** to the live address, or walk Kofi through it. See section 5.
-3. **Test end to end with Kofi** and fix what breaks. Nothing has been run yet. See section 6.
-4. **Close the known gaps** in section 7, in the order listed.
-5. Stop there and report. Phase 2 and 3 (section 9) need Kofi's go-ahead.
+Stash is live and Kofi uses it. All three phases of the spec are built.
+
+- **Live address:** https://stash-gamma-jet.vercel.app
+- Every push to `main` deploys to production.
+- There is no job in progress. Wait for Kofi to ask for something, or pick from section 7 with
+  his go-ahead.
+
+After any push, tell Kofi to reload Stash (Cmd+R, or pull down on the phone). An open tab keeps
+running the old version and he will not see the change.
 
 ## 2. What Stash is
 
@@ -34,141 +38,160 @@ The look in one line: plain white ground, bare images with no captions or border
 grey pill controls with no shadow, ink for the active control only, no accent colour.
 Tokens are in `app/globals.css` under `:root`.
 
-## 3. Current state
+## 3. What is set up
 
-### Done
+- **Code:** `github.com/deadskyiv-a11y/stash`, branch `main`. Next.js 16, React 19, TypeScript.
+- **Vercel:** team `kofi-s-projects3` (id `team_2j4o0fy8gK3q5QZxhEbVRepi`), project `stash`
+  (id `prj_EKJ2fV8Dn4w7oiuIAj9fzkRdAs47`), framework set to `nextjs`, connected to the GitHub
+  repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
+- **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
+  `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
+  - Migration `0001_init.sql` is applied. No migration has been added since.
+  - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
+  - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
+  - Site URL and Redirect URLs point at the live address.
+  - New sign-ups are **off**. Kofi's own sign-in is unaffected.
+  - The Magic Link email template was changed by Kofi to include the 6-digit code
+    (`{{ .Token }}`). This lives in the Supabase dashboard, not in the repository.
+- **Environment variables in Vercel** (names are in `.env.example`): the two Supabase values,
+  `NEXT_PUBLIC_APP_NAME`, and `ANTHROPIC_API_KEY` (Sensitive, typed in by Kofi).
+  `.env.local` on this Mac has an empty `ANTHROPIC_API_KEY`, so AI features cannot be run locally.
 
-- Code is in `github.com/deadskyiv-a11y/stash`, branch `main`. Next.js 16, React 19, TypeScript.
-- `next build` and `eslint` pass.
-- Supabase project **Stash** exists and is healthy.
-  - Project ref: `drvmlzjpdvifdmlsnyku`
-  - Region: `eu-west-2`
-  - Organisation id: `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects)
-- Migration `supabase/migrations/0001_init.sql` is applied (as migration `init`).
-- Edge function `embed` is deployed, with JWT verification on.
-- `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
+Rules for the Anthropic key: Kofi types it into the terminal himself. Never write it to a file
+in the repository, never echo it, never commit it.
 
-### Not done
+## 4. What the app does now
 
-- **No Vercel project exists.** The chat session's Vercel connector returned 403 on project creation.
-- Supabase Site URL is still the default, so the sign-in email link will not open the app.
-- `ANTHROPIC_API_KEY` is not set anywhere.
-- **Nothing has been tested at runtime.** No sign-in, save, image upload, search or canvas render.
+**Saving**
+- Paste or drop anywhere, or use the Save box. Links, notes and images.
+- iPhone share sheet: an Apple Shortcut on Kofi's phone opens
+  `https://stash-gamma-jet.vercel.app/#save=<encoded link>`. The app saves the link on load and
+  cleans the address. It rides on the browser's own sign-in, so it opens Stash each time.
 
-## 4. Deploy to Vercel
+**Pictures for links**
+- Ordinary sites: the page's own preview image.
+- YouTube, Instagram, Vimeo, Spotify: each platform's official oEmbed address, tried before the
+  page itself (`OEMBED` list in `lib/fetch-page.ts`). YouTube uses the full-size thumbnail when
+  the video has one.
+- Anything else that comes in bare: open the save and paste, drop or choose a picture
+  ("Add picture" / "Change picture"). The AI re-reads the save with that picture and updates
+  title, summary, tags, group and search.
+- **TikTok has no automatic picture.** See section 7.
 
-Use the Vercel CLI on this Mac, signed in as Kofi. Check with `vercel whoami`.
-If it is not signed in, ask Kofi to run `vercel login`.
+**Filing**
+- The AI files by subject (Travel, Film, Design), never by format or source. It writes in
+  English whatever language the item is in, and keeps names as they are.
+- A long caption is never used as the title. Only its first line is passed as the working title.
+- "Move to a group" in the side panel files a save by hand and pins it.
+- **Pin** keeps a save in its group. Tidy and re-reads never re-file a pinned save.
+- **Tidy** (beside "See all") asks the AI to merge duplicate groups and rehome Unsorted saves,
+  moving as little as possible. One AI call over the newest 400 unpinned saves.
+- Sub-groups show only once a group has 6 or more saves, and only for sub-groups of 2 or more.
+  This is a display rule in `lib/layout.ts`. The stored sub-group is never rewritten by it.
+- A new save sits under "Inbox" while it is read, then travels to its group (0.8 seconds).
 
-- Team: "Kofi Nsiah's projects", slug `kofi-s-projects3`, id `team_2j4o0fy8gK3q5QZxhEbVRepi`.
-- Project name: `stash`.
-- Link the project to the GitHub repository so every push to `main` deploys.
-- Check `vercel --help` for current flags. Do not trust remembered syntax.
+**Finding**
+- Search as you type, by words and by meaning.
+- A question plus Enter gives a written answer of up to three sentences, with the source saves
+  listed as buttons. It answers only from the saves.
+- Click a group name to focus it. Click it again, or "See all", to go back.
 
-Environment variables, for Production and Preview:
+**Sign-in**
+- Email with a 6-digit code typed into the app, or the link opened once. The code is the
+  reliable route: a link works only once, in whichever window opens it first.
 
-| Name | Value | Secret |
-| --- | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | `https://drvmlzjpdvifdmlsnyku.supabase.co` | No |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_V1mL6DGMdJvPPj0KrMxtpA_Ih1nvuQM` | No, public by design |
-| `NEXT_PUBLIC_APP_NAME` | `Stash` | No |
-| `ANTHROPIC_API_KEY` | Kofi supplies it | **Yes** |
-| `ANTHROPIC_MODEL` | Optional. Code defaults to `claude-haiku-5-5`. | No |
+**Phone**
+- Two-row header, one sliding row of controls at the bottom, one-finger pan, two-finger pinch.
+- The spec says "No canvas on the phone". The canvas was built for the phone anyway and Kofi
+  said the zoom works fine, so it stays unless he says otherwise.
 
-Rules for the Anthropic key:
+## 5. Confirmed, and not yet tried
 
-- Kofi creates it in the Anthropic console and types it into the terminal prompt himself.
-- Never write it to a file in the repository, never echo it, never commit it.
-- Mark it Sensitive in Vercel.
-- The app works without it. Saves then land in a cluster called "Unsorted" with no summary or tags.
+**Confirmed on the live site**, by Kofi or by checking the database:
+sign-in with the code, saving links, notes and images, pale-image edge, search by meaning,
+filters, list view, delete (removes the stored file too), YouTube and Instagram pictures,
+filing by subject, a French caption filed in English, the iPhone share button, pinch zoom on
+the phone, Pin, written answers, sign-ups disabled, and the `embed` lock (the owner gets
+embeddings, the public key gets 403).
 
-After the first deploy, confirm the build log is clean and note the production address.
+A stranger's access was proven in SQL with an impersonated token, not with a real second
+account: no saves seen, no files seen, inserts and updates blocked.
 
-## 5. Supabase sign-in setting
+**Built but never tried by anyone:**
+- Pasting or dropping a picture onto an open save, and the AI re-read that follows.
+- Move to a group.
+- A new save travelling from the Inbox to its group.
+- The side panel keeping long text inside its edge.
+- Tidy with something real to tidy. Kofi ran it on four well-filed saves and nothing moved.
+- Vimeo and Spotify pictures on the live site (they work when run on this Mac).
+- The fix for a touch tap landing on the newly opened panel. It was a best guess at what Kofi
+  called "a bit buggy" when opening a save on the phone.
 
-Sign-in is by email link. It needs the live address registered:
+## 6. Things that bit us
 
-- Supabase dashboard, project Stash, Authentication, URL Configuration.
-- Set **Site URL** to the Vercel production address.
-- Add the same address under **Redirect URLs**.
+- **Sign-in emails are capped at about 2 an hour.** Supabase's built-in mailer is shared and
+  rate-limited. Do not request sign-in emails to test. The fix, if Kofi ever wants it, is a
+  proper email service (Resend) with a verified domain. He was advised to skip it for now.
+- **Claude Code cannot sign in as Kofi**, so nothing behind sign-in can be tested from here.
+  Check results in the database, check the deployed files for new strings, and ask Kofi to try
+  the rest. Say plainly what was not verified.
+- **Big platforms hide pictures from servers.** YouTube, Instagram and TikTok send a data
+  centre an empty page. oEmbed is the honest way in. Do not pretend to be another company's
+  preview robot to get past this.
+- **Rows with stored pictures cannot be deleted cleanly from SQL.** The file would be left
+  behind. Delete in the app, which removes both.
+- The Vercel CLI here is old (58.x) and its log search returned nothing. Do not rely on it.
 
-If the Supabase CLI on this Mac is signed in and you can do this safely through it, do so.
-Otherwise give Kofi the exact clicks.
+## 7. Open items
 
-## 6. Test plan
-
-Run through this with Kofi on the live address. Fix each failure before moving on.
-
-1. Open the app. The sign-in screen shows the stash wordmark.
-2. Sign in with `deadskyiv@gmail.com`. The email link opens the app, signed in.
-3. Empty state reads "Nothing saved yet".
-4. Paste a link to an article with a preview image. A grey tile appears and pulses, then becomes the image.
-5. Open the tile. Title, summary, tags, cluster and site are filled in.
-6. Paste a link to a page with no preview image. It shows a grey tile with site name and title.
-7. Drop an image file onto the page. It uploads and appears.
-8. Press Save, write a note, submit. A yellow note tile appears.
-9. Save a mostly white image. It gets a thin edge (`is_pale`).
-10. Type in the command box. Non-matches fade, the canvas glides to the matches.
-11. Search by meaning: use words that do not appear in any title.
-12. Try Images, Links, Notes and Last 30 days. Try Canvas and List.
-13. Click a cluster name. The canvas flies to it. "See all" returns.
-14. Delete a save. It asks for confirmation, then disappears, and its image is removed from storage.
-15. Sign in with a different email address. That account must see nothing and be unable to save.
-
-Useful checks while testing: Vercel runtime logs for `/api/saves` and `/api/search`,
-Supabase logs for the `embed` function, and the Supabase security advisors.
-
-## 7. Known gaps, in priority order
-
-1. **Runtime bugs.** Expect some. Section 6 will surface them.
-2. **`embed` accepts any caller holding the public key.** It exposes no data but lets a stranger
-   spend compute. Inside the function, verify the JWT's user and check `public.is_owner()`.
-3. **Search threshold is a guess.** `search_saves` uses `min_similarity = 0.8` for the `gte-small`
-   model. Tune it against real saves so unrelated items do not match.
-4. **Sign-up is open at the auth level.** A stranger can create an account. Row rules and
-   `is_owner()` stop them reading or writing anything, and the API routes reject them, but
-   consider disabling sign-ups in Supabase once Kofi has signed in once.
-5. **Links with no preview image** fall back to a grey text tile. The spec wants every link to
-   carry a picture. A screenshot service is the fix. Ask Kofi before adding a paid one.
-6. **Every tile is always in the page.** Fine for hundreds of saves. Add on-screen-only drawing
-   before thousands.
-7. **Trackpad behaviour differs from the spec on purpose.** Mouse wheel and pinch zoom,
-   two-finger swipe pans. Confirm Kofi is happy with it.
-8. **Supabase advisor warning** on `public.is_owner()` (a SECURITY DEFINER function callable by
-   signed-in users). Intended. It returns only whether the caller is on the owner list.
+1. **TikTok covers.** TikTok's oEmbed no longer returns a picture or title, and a free preview
+   service returned only the logo. Kofi does not want to paste screenshots. The offer on the
+   table is a trial of a paid preview service (Iframely was suggested, unverified for TikTok).
+   He has not signed up. Ask before adding anything paid.
+2. **Dragging a tile to a chosen spot.** The spec imagines it. Pinning today fixes the group,
+   not the position. Not built, not asked for yet.
+3. **Background save from the share sheet.** Today the Shortcut opens Stash. A silent save
+   needs a personal token system. Not asked for yet.
+4. **Search threshold is still a guess.** `search_saves` uses `min_similarity = 0.8`, and the
+   answer route uses 0.76. Tune against real saves once there are a few dozen.
+5. **Every tile is always in the page.** Fine for hundreds of saves. Add on-screen-only drawing
+   before thousands. The spec asks for 60 frames a second at 2,000 saves.
+6. **Trackpad behaviour** differs from the spec on purpose (wheel and pinch zoom, two-finger
+   swipe pans). Kofi has not said whether he is happy with it.
+7. **Supabase advisor warning** on `public.is_owner()`. Intended. It returns only whether the
+   caller is on the owner list.
+8. Spec items never built: a browser button for saving on the desktop, and "Paste" and
+   "New note" buttons on the phone screen.
 
 ## 8. How the code is laid out
 
 | Path | What it does |
 | --- | --- |
-| `app/page.tsx`, `components/App.tsx` | The whole client app: sign-in, state, command box, filters, list, detail panel, capture |
-| `components/Canvas.tsx` | The canvas: camera, drag, zoom, glide, tiles, labels |
+| `app/page.tsx`, `components/App.tsx` | The whole client app: sign-in, state, command box, answers, filters, list, detail panel, capture, pin, move, tidy |
+| `components/Canvas.tsx` | The canvas: camera, drag, pinch, zoom, glide, tiles, labels |
 | `lib/layout.ts` | Places tiles into clusters and sub-groups |
-| `app/api/saves/route.ts` | Accepts a new link, note or uploaded image |
-| `lib/process.ts` | Reads a save: fetch page, store preview, ask Claude, embed, update the row |
-| `lib/fetch-page.ts` | Fetches pages and images. Blocks private and internal addresses. Keep that guard. |
-| `lib/ai.ts` | The Claude call that writes title, summary, tags, cluster, sub-group, facts |
+| `app/api/saves/route.ts` | Accepts a new link, note or image, or a picture for an existing save |
 | `app/api/search/route.ts` | Embeds the query and calls `search_saves` |
+| `app/api/answer/route.ts` | Finds the closest saves and asks Claude for a written answer |
+| `app/api/tidy/route.ts` | Asks Claude to re-file unpinned saves and applies the moves |
+| `lib/process.ts` | Reads a save: fetch page, store preview, ask Claude, embed, update the row. Also `setPicture` |
+| `lib/fetch-page.ts` | Fetches pages, images and oEmbed. Blocks private and internal addresses. Keep that guard. |
+| `lib/ai.ts` | The three Claude calls: read a save, tidy, answer |
 | `lib/server.ts` | Builds a database client that acts as the signed-in user |
 | `supabase/migrations/` | Database schema. Add new numbered files. Never edit an applied one. |
-| `supabase/functions/embed/` | Edge function that turns text into a 384-number vector |
+| `supabase/functions/embed/` | Edge function that turns text into a 384-number vector. Owner only. |
 
 How it fits together:
 
-- The browser talks to Supabase directly for reading saves, signed image addresses and deletes.
-  Row-level rules do the protecting.
-- The two API routes take the user's access token in an `Authorization: Bearer` header and act
+- The browser talks to Supabase directly for reading saves, signed image addresses, deletes,
+  pin and move. Row-level rules do the protecting.
+- The API routes take the user's access token in an `Authorization: Bearer` header and act
   as that user. There is no service-role key in this app. Do not add one.
 - Images live in the private `saves` bucket under `<user id>/`.
+- To deploy the edge function:
+  `supabase functions deploy embed --project-ref drvmlzjpdvifdmlsnyku --use-api`
 
-## 9. What comes after, only when Kofi says go
-
-- **Phase 2:** Inbox zone with arrival animation, sub-groups that split and merge as clusters
-  grow, pinning (a `pinned` column already exists), a "Tidy" action.
-- **Phase 3:** iPhone screen, an Apple Shortcut for the share sheet, written answers with
-  sources in the command box.
-
-## 10. House rules for this repository
+## 9. House rules for this repository
 
 - Read `AGENTS.md`. This is Next.js 16. Check `node_modules/next/dist/docs/` before using an
   API from memory.
