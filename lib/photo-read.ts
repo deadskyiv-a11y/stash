@@ -10,14 +10,17 @@ export type PhotoInfo = {
   rating: number | null;
   keywords: string[];
   thumb: Blob | null;
+  /** A larger preview for the full-screen view. Null when the browser could not open the file. */
+  view: Blob | null;
   w: number | null;
   h: number | null;
 };
 
 const THUMB = 640;
+const VIEW = 1800;
 
-function draw(src: CanvasImageSource, sw: number, sh: number): Promise<{ blob: Blob | null; w: number; h: number }> {
-  const k = Math.min(1, THUMB / Math.max(sw, sh));
+function draw(src: CanvasImageSource, sw: number, sh: number, long = THUMB): Promise<{ blob: Blob | null; w: number; h: number }> {
+  const k = Math.min(1, long / Math.max(sw, sh));
   const w = Math.max(1, Math.round(sw * k)), h = Math.max(1, Math.round(sh * k));
   const c = document.createElement("canvas");
   c.width = w; c.height = h;
@@ -28,7 +31,7 @@ function draw(src: CanvasImageSource, sw: number, sh: number): Promise<{ blob: B
 
 /** Reads what the camera wrote into the file (date, place, camera, Lightroom rating and keywords) and makes a small picture of it. */
 export async function readPhoto(file: File): Promise<PhotoInfo> {
-  const info: PhotoInfo = { takenAt: null, lat: null, lng: null, camera: null, lens: null, settings: null, rating: null, keywords: [], thumb: null, w: null, h: null };
+  const info: PhotoInfo = { takenAt: null, lat: null, lng: null, camera: null, lens: null, settings: null, rating: null, keywords: [], thumb: null, view: null, w: null, h: null };
   const exifr = (await import("exifr")).default;
   try {
     const m = (await exifr.parse(file, { tiff: true, exif: true, gps: true, xmp: true, iptc: true })) || {};
@@ -47,8 +50,9 @@ export async function readPhoto(file: File): Promise<PhotoInfo> {
   try {
     const bmp = await createImageBitmap(file, { imageOrientation: "from-image" });
     const t = await draw(bmp, bmp.width, bmp.height);
+    const v = Math.max(bmp.width, bmp.height) > THUMB ? await draw(bmp, bmp.width, bmp.height, VIEW) : null;
     bmp.close();
-    Object.assign(info, { thumb: t.blob, w: t.w, h: t.h });
+    Object.assign(info, { thumb: t.blob, view: v?.blob || null, w: t.w, h: t.h });
   } catch {
     // RAW files, and HEIC outside Safari: the browser cannot open them, but most carry a small preview inside.
     try {

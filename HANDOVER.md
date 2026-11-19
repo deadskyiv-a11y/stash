@@ -46,7 +46,7 @@ Tokens are in `app/globals.css` under `:root`.
   repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
 - **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
   `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
-  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql`, `0006_photo_tags.sql`, `0007_photo_projects.sql` and `0008_save_recipe.sql` are applied.
+  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql`, `0006_photo_tags.sql`, `0007_photo_projects.sql`, `0008_save_recipe.sql` and `0009_photo_view.sql` are applied.
   - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
   - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
   - Site URL and Redirect URLs point at the live address.
@@ -206,6 +206,16 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
 - **The AI considers the shoot.** When reading a photo, the tag route tells it how other photos
   taken within three hours either side were filed, and asks it to keep a shoot together. This
   only shapes new readings; photos already read are not re-read. Untried.
+- **Large view.** Clicking a photo in the grid opens it full-screen on white: arrow keys or the
+  side buttons step through the photos as currently shown, 1 to 5 rate, 0 clears, I toggles the
+  details panel, Esc closes, a click on the picture switches between fit and real size. New
+  uploads keep an 1800px preview (`view_path`, `<id>-view.jpg`); older photos show their 640px
+  thumbnail, marked "small preview". "Load the original" fetches the full file from Drive into
+  the browser. Untried: built without being able to sign in and look at it.
+- **Drive pass renewal.** A batch starts on a fresh pass, and one about to run out is renewed
+  mid-batch. Google renews through a pop-up window, which the browser may block when no click
+  led to it. The batch then pauses and a card offers "Connect and carry on" with the photos
+  still waiting. Untried. A server-side refresh token would remove the pop-up altogether.
 - **Map view** (Grid | Map in the bottom bar). Every photo with a position, passing the current
   search and filters, on a draggable map (`leaflet`, `components/PhotoMap.tsx`). Photos close
   together share one pin with a count; clicking it zooms in, or lists the photos when they sit

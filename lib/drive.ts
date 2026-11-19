@@ -3,7 +3,9 @@
 // Google Drive, straight from the browser. Stash asks for the narrowest permission Google offers
 // ("drive.file"): it can create files and see the files it created, and nothing else in the Drive.
 // ponytail: the pass lasts about an hour and lives only in this tab, so there is no secret and nothing
-// stored on a server. Kofi clicks Connect again when it runs out. Add a server-side refresh if that grates.
+// stored on a server. Stash asks Google for a fresh one before a batch and when one is about to run out.
+// Google only renews through a small window, which a browser may block when no click led to it; the photo
+// room then pauses the batch and shows a Reconnect button. A server-side refresh token would remove even that.
 
 const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "";
 const SCOPE = "https://www.googleapis.com/auth/drive.file";
@@ -37,9 +39,14 @@ function loadGis(): Promise<Gis> {
   });
 }
 
-/** Opens Google's own window asking Kofi to allow Drive. Must be called from a click. */
-export async function connectDrive(): Promise<boolean> {
-  if (driveConnected()) return true;
+/** Minutes left on the current pass. Zero when there is none. */
+export function driveMinutesLeft(): number {
+  return driveConnected() ? Math.max(0, (token!.exp - Date.now()) / 60_000) : 0;
+}
+
+/** Opens Google's own window asking Kofi to allow Drive. With fresh set, asks for a new pass even while one is still good. Resolves false when the window was blocked or closed. */
+export async function connectDrive(fresh = false): Promise<boolean> {
+  if (!fresh && driveConnected()) return true;
   const google = await loadGis();
   return new Promise((done) => {
     const client = google.accounts.oauth2.initTokenClient({
@@ -101,4 +108,13 @@ export async function uploadToDrive(file: File, folderId: string): Promise<{ id:
     body: new Blob([head, file, `\r\n--${b}--`]),
   });
   return { id: made.id as string, link: (made.webViewLink as string) || `https://drive.google.com/file/d/${made.id}/view` };
+}
+
+/** Fetches the full original from Drive, for looking at a photograph at its real size. */
+export async function downloadFromDrive(id: string): Promise<Blob> {
+  if (!driveConnected()) throw new Error("Google Drive is not connected.");
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media`, { headers: { Authorization: `Bearer ${token!.value}` } });
+  if (res.status === 401) { token = null; throw new Error("Google Drive needs connecting again."); }
+  if (!res.ok) throw new Error(`Google Drive answered with ${res.status}.`);
+  return res.blob();
 }

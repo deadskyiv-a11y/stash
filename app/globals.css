@@ -104,6 +104,23 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .list.photos.with-panel { padding-right: 448px; }
 .ptile.chosen { outline: 3px solid var(--ink); outline-offset: 2px; }
 .pill-btn.small { min-height: 32px; padding: 0 12px; margin-left: 12px; font: 500 13px var(--sans); vertical-align: middle; }
+/* Large view: one photograph on the plain white ground, controls kept to the edges. */
+.lightbox { position: absolute; inset: 0; z-index: 20; background: var(--ground); }
+.lightbox.with-info { right: min(420px, 100vw); }
+.lb-stage { position: absolute; inset: 72px 72px 76px; display: flex; align-items: center; justify-content: center; cursor: zoom-in; overflow: hidden; }
+.lb-stage img { max-width: 100%; max-height: 100%; object-fit: contain; display: block; user-select: none; }
+.lb-stage.actual { inset: 72px 0 76px; display: block; overflow: auto; cursor: zoom-out; }
+.lb-stage.actual img { max-width: none; max-height: none; margin: 0 auto; }
+.lb-top { position: absolute; left: 28px; right: 28px; top: 20px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lb-top .meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-actions { display: flex; gap: 8px; flex: none; }
+.lb-actions .ink { min-height: 44px; padding: 0 16px; }
+.lb-nav { position: absolute; top: 50%; width: 48px; height: 48px; margin-top: -24px; border-radius: 999px; background: var(--control); font-size: 26px; line-height: 1; }
+.lb-nav.prev { left: 14px; }
+.lb-nav.next { right: 14px; }
+.lb-bottom { position: absolute; left: 50%; bottom: 20px; transform: translateX(-50%); }
+.detail.over { z-index: 21; }
+
 /* Map view: grey tiles, photo thumbnails as pins. */
 /* isolation keeps the map library's own high layers inside the map, so Stash's header and bottom bar stay on top of it. */
 .pmap { position: absolute; inset: 0; z-index: 0; isolation: isolate; }
@@ -217,7 +234,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .signin p { margin: 0; }
 .error { color: #b3261e; font-size: 13px; }
 
-.toast { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 12px 18px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 14px; max-width: calc(100vw - 56px); z-index: 10; }
+.toast { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 12px 18px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 14px; max-width: calc(100vw - 56px); z-index: 30; }
 
 /* Phone */
 @media (max-width: 640px) {
@@ -233,6 +250,11 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   .phone-only { display: inline-flex !important; }
   .save.always { display: block; }
   .ptile { height: 120px; }
+  .lb-stage { inset: 116px 8px 72px; }
+  .lb-stage.actual { inset: 116px 0 72px; }
+  .lb-top { left: 16px; right: 16px; top: 12px; flex-direction: column; align-items: flex-start; }
+  .lb-nav { top: auto; bottom: 14px; margin-top: 0; }
+  .lightbox.with-info { right: 0; }
   .pmap-zoom { right: 16px; top: 128px; }
   .pmap-note { left: 16px; top: 132px; max-width: calc(100vw - 150px); }
   .list.photos.with-panel { padding-right: 16px; }

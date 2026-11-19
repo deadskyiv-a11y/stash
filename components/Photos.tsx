@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, supabase } from "@/lib/supabase-browser";
-import { connectDrive, driveConfigured, driveConnected, ensureFolder, uploadToDrive } from "@/lib/drive";
+import { connectDrive, downloadFromDrive, driveConfigured, driveConnected, driveMinutesLeft, ensureFolder, uploadToDrive } from "@/lib/drive";
 import { readPhoto } from "@/lib/photo-read";
 import { nameOf } from "@/lib/places";
 import { Logo } from "./Logo";
@@ -18,9 +18,9 @@ type Photo = {
   id: string; name: string; bytes: number | null; drive_id: string | null; drive_link: string | null; drive_folder: string | null;
   thumb_path: string | null; w: number | null; h: number | null; taken_at: string | null; lat: number | null; lng: number | null;
   place: string | null; camera: string | null; lens: string | null; film: string | null; settings: string | null; rating: number | null; keywords: string[]; created_at: string;
-  tags: string[]; caption: string | null; subject: string | null; tagged: boolean; projects: string[];
+  tags: string[]; caption: string | null; subject: string | null; tagged: boolean; projects: string[]; view_path: string | null;
 };
-const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at,tags,caption,subject,tagged,projects";
+const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at,tags,caption,subject,tagged,projects,view_path";
 
 const dateOf = (p: Photo) => new Date(p.taken_at || p.created_at);
 const month = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
@@ -51,6 +51,14 @@ export function Photos() {
   const [only, setOnly] = useState(""); // show just this project
   const [view, setView] = useState<"grid" | "map">("grid");
   const [spot, setSpot] = useState<string[] | null>(null); // photos sharing one pin on the map
+  const [waiting, setWaiting] = useState<File[] | null>(null); // a batch paused until Drive is reconnected
+  // The large view: one photo filling the screen, with arrows to move between neighbours.
+  const [big, setBig] = useState(false);
+  const [info, setInfo] = useState(false);
+  const [actual, setActual] = useState(false);
+  const [views, setViews] = useState<Record<string, string>>({});
+  const [originals, setOriginals] = useState<Record<string, string>>({});
+  const [fetching, setFetching] = useState(false);
   const [q, setQ] = useState("");
   const [stars, setStars] = useState(0); // show only photos rated at least this
   const [reading, setReading] = useState(0); // photos the AI still has to look at
@@ -128,7 +136,9 @@ export function Photos() {
   const deposit = useCallback(async (files: File[]) => {
     const picked = files.filter((f) => f.type.startsWith("image/") || /\.(raf|cr2|cr3|nef|arw|dng|orf|rw2|heic|heif|tif|tiff)$/i.test(f.name));
     if (picked.length === 0) { say("Those are not pictures."); return; }
-    if (!driveConnected()) { setAdding(true); say("Connect Google Drive first, then add the photos again."); return; }
+    // Start a batch on a fresh pass, so it has the full hour. If the browser blocks Google's window, hold the batch.
+    if (driveMinutesLeft() < 20 && !(await connectDrive(true))) { setAdding(false); setConnected(driveConnected()); setWaiting(picked); return; }
+    setConnected(true);
     const { data } = await supabase().auth.getUser();
     const uid = data.user?.id;
     if (!uid) return;
@@ -136,7 +146,11 @@ export function Photos() {
     let done = 0, skipped = 0, failed = 0;
     setBusy({ done, total: picked.length });
     setAdding(false);
-    for (const f of picked) {
+    let held = 0;
+    for (let i = 0; i < picked.length; i++) {
+      const f = picked[i];
+      // Renew a pass that is about to run out. If that needs a click, pause here and keep what is left.
+      if (driveMinutesLeft() < 3 && !(await connectDrive(true))) { held = picked.length - i; setWaiting(picked.slice(i)); setConnected(false); break; }
       try {
         // The same file dropped twice is kept once.
         if (photos.some((p) => p.name === f.name && p.bytes === f.size)) { skipped++; continue; }
@@ -154,17 +168,24 @@ export function Photos() {
           const up = await supabase().storage.from("saves").upload(thumb, info.thumb, { contentType: "image/jpeg" });
           if (up.error) thumb = null;
         }
+        let view: string | null = null;
+        if (info.view) {
+          view = `${uid}/photos/${id}-view.jpg`;
+          const up = await supabase().storage.from("saves").upload(view, info.view, { contentType: "image/jpeg" });
+          if (up.error) view = null;
+        }
         const { data: row, error } = await supabase().from("photos").insert({
           id, name: f.name, bytes: f.size, drive_id: drive.id, drive_link: drive.link, drive_folder: folder.join(" / "),
-          thumb_path: thumb, w: info.w, h: info.h, taken_at: info.takenAt, lat, lng, place: named,
+          thumb_path: thumb, view_path: view, w: info.w, h: info.h, taken_at: info.takenAt, lat, lng, place: named,
           camera: info.camera, lens: info.lens, settings: info.settings, rating: info.rating, keywords: info.keywords,
         }).select(COLUMNS).single();
         if (error || !row) throw new Error(error?.message || "Could not record the photo");
         setPhotos((all) => [row as unknown as Photo, ...all]);
       } catch (e) {
-        failed++;
         console.error("Photo failed", f.name, e);
-        if (!driveConnected()) { say("Google Drive needs connecting again. The rest were not uploaded."); setConnected(false); break; }
+        // Drive turned the pass away mid-batch: hold this photo and the rest, to carry on after a reconnect.
+        if (!driveConnected()) { held = picked.length - i; setWaiting(picked.slice(i)); setConnected(false); break; }
+        failed++;
       } finally {
         done++;
         setBusy({ done, total: picked.length });
@@ -172,6 +193,7 @@ export function Photos() {
     }
     setBusy(null);
     const ok = done - skipped - failed;
+    if (held) { say(`Paused. ${held} ${held === 1 ? "photo is" : "photos are"} waiting for Google Drive.`); return; }
     say([`${ok} ${ok === 1 ? "photo" : "photos"} added.`, skipped ? `${skipped} already here.` : "", failed ? `${failed} failed.` : ""].filter(Boolean).join(" "));
   }, [photos, place, placeAt, say]);
 
@@ -229,6 +251,28 @@ export function Photos() {
   const opened = open ? photos.find((p) => p.id === open) || null : null;
 
   const order = useMemo(() => groups.flatMap(([, list]) => list.map((p) => p.id)), [groups]);
+  // The large view steps through the photos in the order they are showing, each one once.
+  const sequence = useMemo(() => [...new Set(order)], [order]);
+  const at = open ? sequence.indexOf(open) : -1;
+  const closeBig = useCallback(() => { setBig(false); setInfo(false); setActual(false); setOpen(null); }, []);
+  const step = useCallback((by: number) => {
+    if (at < 0 || sequence.length === 0) return;
+    setActual(false);
+    setConfirmDelete(false);
+    setOpen(sequence[(at + by + sequence.length) % sequence.length]);
+  }, [at, sequence]);
+
+  // Large previews are private too. Sign the one on screen and its neighbours, so stepping feels instant.
+  useEffect(() => {
+    if (!big || at < 0) return;
+    const need = [0, 1, -1].map((d) => photos.find((p) => p.id === sequence[(at + d + sequence.length) % sequence.length])?.view_path)
+      .filter((p): p is string => !!p && !views[p]);
+    if (need.length === 0) return;
+    supabase().storage.from("saves").createSignedUrls([...new Set(need)], 60 * 60 * 6).then(({ data }) => {
+      if (data) setViews((v) => ({ ...v, ...Object.fromEntries(data.filter((d) => d.signedUrl && d.path).map((d) => [d.path as string, d.signedUrl as string])) }));
+    });
+  }, [big, at, sequence, photos, views]);
+
   const pick = (id: string, range: boolean) => {
     setChosen((old) => {
       const next = new Set(old);
@@ -277,12 +321,46 @@ export function Photos() {
     if (!add && only === project && !photos.some((x) => !hit.has(x.id) && x.projects.includes(project))) setOnly("");
     if (ids.length > 1) say(add ? `Added ${ids.length} photos to ${project}.` : `Took ${ids.length} photos out of ${project}.`);
   };
+  // Fetches the full original from Drive, to judge sharpness at real size.
+  const loadOriginal = async (p: Photo) => {
+    if (!p.drive_id) return;
+    if (!driveConnected() && !(await connectDrive(true))) { say("Connect Google Drive first, under Add photos."); return; }
+    setConnected(true);
+    setFetching(true);
+    try {
+      const blob = await downloadFromDrive(p.drive_id);
+      setOriginals((o) => ({ ...o, [p.id]: URL.createObjectURL(blob) }));
+    } catch (e) {
+      say(e instanceof Error ? e.message : "Could not fetch the original.");
+    }
+    setFetching(false);
+  };
+
+  // Keys in the large view: arrows to move, 1 to 5 to rate, 0 to clear, I for details, Esc to leave.
+  useEffect(() => {
+    if (!big) return;
+    const key = (e: KeyboardEvent) => {
+      const a = document.activeElement;
+      if (a instanceof HTMLInputElement || a instanceof HTMLTextAreaElement || a instanceof HTMLSelectElement) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.key === "ArrowRight") { e.preventDefault(); step(1); }
+      else if (e.key === "ArrowLeft") { e.preventDefault(); step(-1); }
+      else if (e.key === "Escape") { e.stopImmediatePropagation(); closeBig(); }
+      else if (e.key.toLowerCase() === "i") setInfo((x) => !x);
+      else if (/^[0-5]$/.test(e.key) && opened) edit(opened, { rating: e.key === "0" ? null : Number(e.key) });
+    };
+    window.addEventListener("keydown", key, true);
+    return () => window.removeEventListener("keydown", key, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [big, step, closeBig, opened]);
+
   const day = (iso: string | null) => { if (!iso) return ""; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
   const remove = async (p: Photo) => {
     const { error } = await supabase().from("photos").delete().eq("id", p.id);
     if (error) { say("Could not remove. " + error.message); return; }
-    if (p.thumb_path) await supabase().storage.from("saves").remove([p.thumb_path]);
+    const stored = [p.thumb_path, p.view_path].filter((x): x is string => !!x);
+    if (stored.length) await supabase().storage.from("saves").remove(stored);
     setPhotos((all) => all.filter((x) => x.id !== p.id));
     setOpen(null);
   };
@@ -293,7 +371,7 @@ export function Photos() {
       {view === "map" && loaded && showing > onMap.length && (
         <p className="pmap-note">{showing - onMap.length} {showing - onMap.length === 1 ? "photo has" : "photos have"} no place yet, so {showing - onMap.length === 1 ? "it is" : "they are"} not on the map.</p>
       )}
-      <div className={"list photos" + (selecting || opened ? " with-panel" : "")} hidden={view === "map"}>
+      <div className={"list photos" + (selecting || (opened && !big) ? " with-panel" : "")} hidden={view === "map"}>
         {groups.map(([name, list]) => (
           <section key={name} className="pgroup">
             <h2 className="label cluster static">{name} <span>{list.length}</span>
@@ -305,7 +383,7 @@ export function Photos() {
                 const w = p.w && p.h ? Math.round((180 * p.w) / p.h) : 180;
                 return (
                   <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "")} style={{ width: w }} aria-label={p.name} aria-pressed={selecting ? chosen.has(p.id) : undefined}
-                    onClick={(e) => { if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setOpen(p.id); } }}>
+                    onClick={(e) => { if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setActual(false); setInfo(false); setOpen(p.id); setBig(true); } }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     {url ? <img src={url} alt="" loading="lazy" decoding="async" /> : <span className="tile-text muted">{p.thumb_path ? "" : p.name}</span>}
                     {p.rating ? <span className="stars" aria-label={`${p.rating} stars`}>{p.rating}★</span> : null}
@@ -393,9 +471,51 @@ export function Photos() {
         </div>
       </footer>
 
-      {opened && (
-        <aside className="detail" aria-label="Photo details">
-          <button type="button" className="pill-btn close" onClick={() => setOpen(null)}>Close</button>
+      {big && opened && (() => {
+        const src = originals[opened.id] || (opened.view_path ? views[opened.view_path] : undefined) || (opened.thumb_path ? urls[opened.thumb_path] : undefined);
+        const small = !originals[opened.id] && !opened.view_path;
+        return (
+          <div className={"lightbox" + (info ? " with-info" : "")} role="dialog" aria-label={opened.name}>
+            <div className={"lb-stage" + (actual ? " actual" : "")} onClick={() => setActual((x) => !x)} title={actual ? "Click to fit the screen" : "Click for real size"}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              {src ? <img key={opened.id} src={src} alt={opened.name} draggable={false} /> : <span className="muted">{opened.name}</span>}
+            </div>
+            <div className="lb-top">
+              <span className="meta">{at + 1} of {sequence.length}  ·  {opened.name}{small ? "  ·  small preview" : originals[opened.id] ? "  ·  original" : ""}</span>
+              <span className="lb-actions">
+                {!originals[opened.id] && opened.drive_id && <button type="button" className="pill-btn" disabled={fetching} onClick={() => loadOriginal(opened)}>{fetching ? "Fetching" : "Load the original"}</button>}
+                <button type="button" className={info ? "ink" : "pill-btn"} onClick={() => setInfo((x) => !x)}>Details</button>
+                <button type="button" className="pill-btn" onClick={closeBig}>Close</button>
+              </span>
+            </div>
+            <button type="button" className="lb-nav prev" aria-label="Previous photo" onClick={() => step(-1)}>‹</button>
+            <button type="button" className="lb-nav next" aria-label="Next photo" onClick={() => step(1)}>›</button>
+            <div className="lb-bottom rate" role="group" aria-label="Rating">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button key={n} type="button" className={(opened.rating || 0) >= n ? "on" : ""} aria-label={`${n} ${n === 1 ? "star" : "stars"}`} onClick={() => edit(opened, { rating: opened.rating === n ? null : n })}>★</button>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
+      {waiting && !busy && (
+        <section className="answer" aria-live="polite">
+          <p>Google Drive needs {connected ? "reconnecting" : "connecting"}. {waiting.length} {waiting.length === 1 ? "photo is" : "photos are"} waiting to upload.</p>
+          <button type="button" className="ink" onClick={async () => {
+            if (!(await connectDrive(true))) { say("Google Drive was not connected."); return; }
+            const rest = waiting;
+            setWaiting(null);
+            setConnected(true);
+            deposit(rest);
+          }}>Connect and carry on</button>
+          <button type="button" className="pill-btn" onClick={() => setWaiting(null)}>Forget these photos</button>
+        </section>
+      )}
+
+      {opened && (!big || info) && (
+        <aside className={"detail" + (big ? " over" : "")} aria-label="Photo details">
+          <button type="button" className="pill-btn close" onClick={() => (big ? setInfo(false) : setOpen(null))}>Close</button>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           {opened.thumb_path && urls[opened.thumb_path] && <img src={urls[opened.thumb_path]} alt={opened.name} />}
           <h2>{opened.name}</h2>
