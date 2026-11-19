@@ -1,15 +1,37 @@
 {
   "manifest_version": 3,
   "name": "Save to Stash",
-  "version": "1.0",
+  "version": "1.1",
   "description": "Saves the page you are on, or the text you have highlighted, to Stash.",
-  "permissions": ["activeTab", "scripting"],
-  "action": { "default_title": "Save to Stash" },
-  "background": { "service_worker": "background.js" },
+  "permissions": [
+    "activeTab",
+    "scripting"
+  ],
+  "action": {
+    "default_title": "Save to Stash",
+    "default_icon": {
+      "16": "icon16.png",
+      "32": "icon32.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
   "commands": {
     "_execute_action": {
-      "suggested_key": { "default": "Alt+Shift+S", "mac": "Alt+Shift+S" },
+      "suggested_key": {
+        "default": "Alt+Shift+S",
+        "mac": "Alt+Shift+S"
+      },
       "description": "Save this page or the highlighted text to Stash"
     }
+  },
+  "icons": {
+    "16": "icon16.png",
+    "32": "icon32.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   }
 }
