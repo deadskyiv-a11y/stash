@@ -4,9 +4,26 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const session = new Supabase.ai.Session("gte-small");
 
+// Asks the database whether the caller's token belongs to the owner.
+// Public-key and stranger tokens get false, so nobody else can spend compute here.
+async function isOwner(req: Request): Promise<boolean> {
+  const auth = req.headers.get("authorization");
+  const apikey = req.headers.get("apikey") ?? Deno.env.get("SUPABASE_ANON_KEY");
+  if (!auth || !apikey) return false;
+  const r = await fetch(`${Deno.env.get("SUPABASE_URL")}/rest/v1/rpc/is_owner`, {
+    method: "POST",
+    headers: { authorization: auth, apikey, "content-type": "application/json" },
+    body: "{}",
+  });
+  return r.ok && (await r.json()) === true;
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method !== "POST") {
     return new Response("Method not allowed", { status: 405 });
+  }
+  if (!(await isOwner(req))) {
+    return Response.json({ error: "Not allowed" }, { status: 403 });
   }
   try {
     const { input } = await req.json();
