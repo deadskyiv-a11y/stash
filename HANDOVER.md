@@ -46,7 +46,7 @@ Tokens are in `app/globals.css` under `:root`.
   repository. `stash.vercel.app` belongs to someone else. Ours is `stash-gamma-jet.vercel.app`.
 - **Supabase:** project **Stash**, ref `drvmlzjpdvifdmlsnyku`, region `eu-west-2`, organisation
   `wwubfxtegapykaulntpq` (the paid one, shared with Adwene and client projects).
-  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql` and `0006_photo_tags.sql` are applied.
+  - Migrations `0001_init.sql`, `0002_file_path.sql` and `0003_form_and_excerpt.sql`, `0004_photos.sql`, `0005_photo_film.sql`, `0006_photo_tags.sql` and `0007_photo_projects.sql` are applied.
   - Edge function `embed` is at version 2, JWT verification on, and answers only the owner.
   - `private.allowed_emails` holds one row: `deadskyiv@gmail.com`.
   - Site URL and Redirect URLs point at the live address.
@@ -189,8 +189,16 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   subject, description, tags, keywords, camera, lens, film and month. It is word matching in the
   browser, not search by meaning. Ratings show as a small mark on the tile, can be set with a
   star picker in the panel, and filter from the bottom bar.
-- Each row records the tokens its reading used (`ai_in`, `ai_out`). Kofi was promised a real
-  cost per photo, measured on his first photos, before he loads a large batch.
+- **The AI considers the shoot.** When reading a photo, the tag route tells it how other photos
+  taken within three hours either side were filed, and asks it to keep a shoot together. This
+  only shapes new readings; photos already read are not re-read. Untried.
+- **Projects.** A photo can be in several projects or none (`projects text[]` on the row; the
+  list of projects is every name in use). Add or remove from a photo's panel or from a selection
+  (`set_photo_project` database function, one call for many photos). Group by Project, or show
+  one project with the picker in the bottom bar. Untried.
+- Measured cost of reading, on his first 13 photos: about 760 tokens in and 130 out each, roughly
+  USD 0.14 per 1,000 photos at Haiku 5.5's listed prices.
+- Each row records the tokens its reading used (`ai_in`, `ai_out`).
 - **Agreed next steps:** (3) photo book tools such as shortlists, once he
   has used it. Measure the AI cost on his first 50 photos and tell him before he loads many.
 

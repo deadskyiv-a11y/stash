@@ -104,6 +104,10 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .list.photos.with-panel { padding-right: 448px; }
 .ptile.chosen { outline: 3px solid var(--ink); outline-offset: 2px; }
 .pill-btn.small { min-height: 32px; padding: 0 12px; margin-left: 12px; font: 500 13px var(--sans); vertical-align: middle; }
+.projects { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.projects dl div { border-bottom: none; padding: 0; }
+.pick { min-height: 44px; padding: 0 16px; border: none; outline: none; border-radius: 999px; background: transparent; font: 500 14px var(--sans); color: inherit; cursor: pointer; max-width: 200px; }
+.pick.on { background: var(--ink); color: #fff; }
 .ptile { position: relative; }
 /* A small rating mark in the corner. White on the picture's own corner, no shadow. */
 .stars { position: absolute; left: 6px; bottom: 6px; padding: 2px 7px; border-radius: 999px; background: var(--ground); font: 500 11px/1.5 var(--sans); color: var(--ink); }

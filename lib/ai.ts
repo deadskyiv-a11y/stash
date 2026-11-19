@@ -195,11 +195,12 @@ Rules:
 - subject: the kind of photograph, 1 or 2 words, Title Case, such as Portrait, Street, Landscape, Architecture, Food, Event, Still Life, Nature, Interior or Travel. REUSE one of the existing subjects when it fits. Create a new one only when none fits.
 - tags: 6 to 10 lowercase tags of one or two words. Cover what is in the frame, the setting, the dominant colours, the light and the mood. Use plain words a person would type when searching.
 - caption: one sentence describing the photograph so it can be found by description later.
+- When other photographs from the same shoot are listed, give this one the subject most of them have, so a shoot stays together. Choose differently only when this photograph is plainly a different kind of picture.
 - Describe people by what is visible, such as clothing, action and expression. Never name anyone and never guess who someone is.
 - Never invent details that are not visible.`;
 
 /** Reads one photograph's thumbnail. Returns the tokens used as well, so the cost per photo can be measured. */
-export async function tagPhoto(image: Buffer, subjects: string[], place: string | null): Promise<{ subject: string; tags: string[]; caption: string; usage: { in: number; out: number } } | null> {
+export async function tagPhoto(image: Buffer, subjects: string[], place: string | null, shoot: string | null): Promise<{ subject: string; tags: string[]; caption: string; usage: { in: number; out: number } } | null> {
   if (!aiEnabled()) return null;
   try {
     const msg = await new Anthropic().messages.create({
@@ -211,7 +212,7 @@ export async function tagPhoto(image: Buffer, subjects: string[], place: string 
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: "image/jpeg", data: image.toString("base64") } },
-          { type: "text", text: `Existing subjects: ${subjects.join(", ") || "(none yet)"}${place ? `\nTaken at: ${place}` : ""}` },
+          { type: "text", text: `Existing subjects: ${subjects.join(", ") || "(none yet)"}${place ? `\nTaken at: ${place}` : ""}${shoot ? `\nOther photographs from the same shoot were filed as: ${shoot}` : ""}` },
         ],
       }],
     });

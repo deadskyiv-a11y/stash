@@ -17,22 +17,22 @@ type Photo = {
   id: string; name: string; bytes: number | null; drive_id: string | null; drive_link: string | null; drive_folder: string | null;
   thumb_path: string | null; w: number | null; h: number | null; taken_at: string | null; lat: number | null; lng: number | null;
   place: string | null; camera: string | null; lens: string | null; film: string | null; settings: string | null; rating: number | null; keywords: string[]; created_at: string;
-  tags: string[]; caption: string | null; subject: string | null; tagged: boolean;
+  tags: string[]; caption: string | null; subject: string | null; tagged: boolean; projects: string[];
 };
-const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at,tags,caption,subject,tagged";
+const COLUMNS = "id,name,bytes,drive_id,drive_link,drive_folder,thumb_path,w,h,taken_at,lat,lng,place,camera,lens,film,settings,rating,keywords,created_at,tags,caption,subject,tagged,projects";
 
 const dateOf = (p: Photo) => new Date(p.taken_at || p.created_at);
 const month = (d: Date) => d.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 const pad = (n: number) => String(n).padStart(2, "0");
 
 /** A detail Kofi can type over. It saves when he leaves the box or presses Enter. */
-function Field({ label, value, placeholder, type = "text", onSave }: { label: string; value: string; placeholder: string; type?: string; onSave: (v: string) => void }) {
+function Field({ label, value, placeholder, type = "text", list, onSave }: { label: string; value: string; placeholder: string; type?: string; list?: string; onSave: (v: string) => void }) {
   const [v, setV] = useState(value);
   return (
     <div>
       <dt>{label}</dt>
       <dd className="grow">
-        <input className="inline" type={type} aria-label={label} value={v} placeholder={placeholder} autoComplete="off"
+        <input className="inline" type={type} list={list} aria-label={label} value={v} placeholder={placeholder} autoComplete="off"
           onChange={(e) => setV(e.target.value)}
           onBlur={() => { if (v.trim() !== value) onSave(v.trim()); }}
           onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }} />
@@ -46,7 +46,8 @@ export function Photos() {
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [urls, setUrls] = useState<Record<string, string>>({});
-  const [group, setGroup] = useState<"date" | "place" | "subject">("date");
+  const [group, setGroup] = useState<"date" | "place" | "subject" | "project">("date");
+  const [only, setOnly] = useState(""); // show just this project
   const [q, setQ] = useState("");
   const [stars, setStars] = useState(0); // show only photos rated at least this
   const [reading, setReading] = useState(0); // photos the AI still has to look at
@@ -191,19 +192,25 @@ export function Photos() {
     const map = new Map<string, Photo[]>();
     for (const p of sorted) {
       if (stars && (p.rating || 0) < stars) continue;
+      if (only && !p.projects.includes(only)) continue;
       if (words.length) {
         // Every word typed must appear somewhere in what is known about the photo.
-        const hay = [p.name, p.place, p.subject, p.caption, p.camera, p.lens, p.film, p.settings, month(dateOf(p)), p.tags.join(" "), p.keywords.join(" "), p.rating ? `${p.rating} stars` : ""].join(" ").toLowerCase();
+        const hay = [p.name, p.place, p.subject, p.caption, p.camera, p.lens, p.film, p.settings, month(dateOf(p)), p.tags.join(" "), p.keywords.join(" "), p.projects.join(" "), p.rating ? `${p.rating} stars` : ""].join(" ").toLowerCase();
         if (!words.every((w) => hay.includes(w))) continue;
       }
-      const k = group === "date" ? month(dateOf(p)) : group === "place" ? p.place || "No place given" : p.subject || (p.tagged ? "Other" : "Not read yet");
-      if (!map.has(k)) map.set(k, []);
-      map.get(k)!.push(p);
+      // A photo in several projects shows under each of them.
+      const keys = group === "project" ? (p.projects.length ? p.projects : ["No project"])
+        : [group === "date" ? month(dateOf(p)) : group === "place" ? p.place || "No place given" : p.subject || (p.tagged ? "Other" : "Not read yet")];
+      for (const k of keys) {
+        if (!map.has(k)) map.set(k, []);
+        map.get(k)!.push(p);
+      }
     }
     const out = [...map.entries()];
     return group === "date" ? out : out.sort((a, b) => b[1].length - a[1].length);
-  }, [photos, group, q, stars]);
-  const showing = groups.reduce((n, [, list]) => n + list.length, 0);
+  }, [photos, group, q, stars, only]);
+  const showing = new Set(groups.flatMap(([, list]) => list.map((p) => p.id))).size;
+  const projects = useMemo(() => [...new Set(photos.flatMap((p) => p.projects))].sort((a, b) => a.localeCompare(b)), [photos]);
 
   const opened = open ? photos.find((p) => p.id === open) || null : null;
 
@@ -243,6 +250,18 @@ export function Photos() {
     setPhotos((all) => all.map((x) => (chosen.has(x.id) ? { ...x, ...patch } : x)));
     setRound((r) => r + 1);
     say(`Set on ${ids.length} ${ids.length === 1 ? "photo" : "photos"}.`);
+  };
+  // Put photos into a project, or take them out. One photo can be in several.
+  const setProject = async (ids: string[], name: string, add: boolean) => {
+    const project = name.trim().slice(0, 60);
+    if (!project || ids.length === 0) return;
+    const { error } = await supabase().rpc("set_photo_project", { ids, project, add });
+    if (error) { say("Could not save that. " + error.message); return; }
+    const hit = new Set(ids);
+    setPhotos((all) => all.map((x) => (!hit.has(x.id) ? x : { ...x, projects: add ? (x.projects.includes(project) ? x.projects : [...x.projects, project]) : x.projects.filter((p) => p !== project) })));
+    setRound((r) => r + 1);
+    if (!add && only === project && !photos.some((x) => !hit.has(x.id) && x.projects.includes(project))) setOnly("");
+    if (ids.length > 1) say(add ? `Added ${ids.length} photos to ${project}.` : `Took ${ids.length} photos out of ${project}.`);
   };
   const day = (iso: string | null) => { if (!iso) return ""; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 
@@ -331,7 +350,17 @@ export function Photos() {
           <button type="button" className={group === "date" ? "on" : ""} onClick={() => setGroup("date")}>Date</button>
           <button type="button" className={group === "place" ? "on" : ""} onClick={() => setGroup("place")}>Place</button>
           <button type="button" className={group === "subject" ? "on" : ""} onClick={() => setGroup("subject")}>Subject</button>
+          <button type="button" className={group === "project" ? "on" : ""} onClick={() => setGroup("project")}>Project</button>
         </div>
+        {projects.length > 0 && (
+          <div className="bar">
+            <label htmlFor="only" className="sr">Show one project</label>
+            <select id="only" className={"pick" + (only ? " on" : "")} value={only} onChange={(e) => setOnly(e.target.value)}>
+              <option value="">All projects</option>
+              {projects.map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+          </div>
+        )}
         <div className="bar">
           {[0, 3, 4, 5].map((n) => (
             <button key={n} type="button" className={stars === n ? "on" : ""} onClick={() => setStars(n)}>{n === 0 ? "Any rating" : n === 5 ? "5★" : `${n}★ and up`}</button>
@@ -383,6 +412,15 @@ export function Photos() {
             // A pin dropped on a photo with no place name fills the name in from the map.
             await edit(opened, { lat, lng, ...(opened.place ? {} : { place: await nameOf(lat, lng) }) });
           }} />
+          <div className="projects">
+            <p className="meta">Projects</p>
+            <div className="tags">
+              {opened.projects.map((p) => (
+                <button key={p} type="button" className="pill-btn" aria-label={`Take out of ${p}`} onClick={() => setProject([opened.id], p, false)}>{p} <span aria-hidden="true">×</span></button>
+              ))}
+            </div>
+            <dl><Field key={opened.id + "pj" + round} label="Add to" value="" list="project-names" placeholder="A project name" onSave={(v) => setProject([opened.id], v, true)} /></dl>
+          </div>
           {opened.tags.length > 0 && <div className="tags">{opened.tags.map((t) => <button key={t} type="button" className="pill-btn" onClick={() => { setQ(t); setOpen(null); }}>{t}</button>)}</div>}
           {opened.keywords.length > 0 && <div className="tags">{opened.keywords.map((k) => <span key={k} className="pill-btn link">{k}</span>)}</div>}
           {confirmDelete
@@ -413,12 +451,16 @@ export function Photos() {
                 <Field key={"ml" + round} label="Lens" value="" placeholder="Set a lens" onSave={(v) => { if (v) editMany({ lens: v }); }} />
                 <Field key={"mf" + round} label="Film" value="" placeholder="Set a film stock" onSave={(v) => { if (v) editMany({ film: v }); }} />
                 <Field key={"ms" + round} label="Subject" value="" placeholder="Set a subject" onSave={(v) => { if (v) editMany({ subject: v }); }} />
+                <Field key={"mp" + round} label="Add to project" value="" list="project-names" placeholder="A project name" onSave={(v) => setProject([...chosen], v, true)} />
+                <Field key={"mq" + round} label="Take out of" value="" list="project-names" placeholder="A project name" onSave={(v) => setProject([...chosen], v, false)} />
               </dl>
               <button type="button" className="pill-btn" onClick={() => setChosen(new Set())}>Clear selection</button>
             </>
           )}
         </aside>
       )}
+
+      <datalist id="project-names">{projects.map((p) => <option key={p} value={p} />)}</datalist>
 
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
