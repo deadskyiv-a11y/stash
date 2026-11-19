@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase-browser";
 import { connectDrive, driveConfigured, driveConnected, ensureFolder, uploadToDrive } from "@/lib/drive";
 import { readPhoto } from "@/lib/photo-read";
+import { nameOf } from "@/lib/places";
 import { Logo } from "./Logo";
+import { PinMap, PlaceInput } from "./PlaceMap";
 
 const NAME = process.env.NEXT_PUBLIC_APP_NAME || "Stash";
 const ROOT = "Stash Photos";
@@ -47,6 +49,7 @@ export function Photos() {
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [place, setPlace] = useState("");
+  const [placeAt, setPlaceAt] = useState<{ lat: number; lng: number } | null>(null);
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
   const [toast, setToast] = useState("");
@@ -102,6 +105,9 @@ export function Photos() {
         // The same file dropped twice is kept once.
         if (photos.some((p) => p.name === f.name && p.bytes === f.size)) { skipped++; continue; }
         const info = await readPhoto(f);
+        // The camera's own position wins. Failing that, the place picked for the batch. A photo with a position and no name gets the name looked up.
+        const lat = info.lat ?? placeAt?.lat ?? null, lng = info.lng ?? placeAt?.lng ?? null;
+        const named = where || (info.lat !== null && info.lng !== null ? await nameOf(info.lat, info.lng) : null);
         const d = info.takenAt ? new Date(info.takenAt) : new Date();
         const folder = [ROOT, String(d.getFullYear()), `${d.getFullYear()}-${pad(d.getMonth() + 1)}`];
         const drive = await uploadToDrive(f, await ensureFolder(folder));
@@ -114,7 +120,7 @@ export function Photos() {
         }
         const { data: row, error } = await supabase().from("photos").insert({
           id, name: f.name, bytes: f.size, drive_id: drive.id, drive_link: drive.link, drive_folder: folder.join(" / "),
-          thumb_path: thumb, w: info.w, h: info.h, taken_at: info.takenAt, lat: info.lat, lng: info.lng, place: where,
+          thumb_path: thumb, w: info.w, h: info.h, taken_at: info.takenAt, lat, lng, place: named,
           camera: info.camera, lens: info.lens, settings: info.settings, rating: info.rating, keywords: info.keywords,
         }).select(COLUMNS).single();
         if (error || !row) throw new Error(error?.message || "Could not record the photo");
@@ -131,7 +137,7 @@ export function Photos() {
     setBusy(null);
     const ok = done - skipped - failed;
     say([`${ok} ${ok === 1 ? "photo" : "photos"} added.`, skipped ? `${skipped} already here.` : "", failed ? `${failed} failed.` : ""].filter(Boolean).join(" "));
-  }, [photos, place, say]);
+  }, [photos, place, placeAt, say]);
 
   useEffect(() => {
     const over = (e: DragEvent) => e.preventDefault();
@@ -228,7 +234,8 @@ export function Photos() {
           ) : (
             <>
               <label htmlFor="place" className="sr">Where were these taken</label>
-              <input id="place" className="field" value={place} onChange={(e) => setPlace(e.target.value)} placeholder="Where were these taken? Optional" autoComplete="off" />
+              <PlaceInput id="place" className="field" value={place} placeholder="Where were these taken? Optional"
+                onText={(v) => { setPlace(v); setPlaceAt(null); }} onPick={(s) => { setPlace(s.label); setPlaceAt({ lat: s.lat, lng: s.lng }); }} />
               <div className="adder-actions">
                 <span className="meta">Or drop them anywhere.</span>
                 <button type="button" className="ink" onClick={() => file.current?.click()}>Choose photos</button>
@@ -261,7 +268,13 @@ export function Photos() {
               edit(opened, { taken_at: at && !isNaN(at.getTime()) ? at.toISOString() : null });
             }} />
             {opened.taken_at && <div><dt>Time</dt><dd>{new Date(opened.taken_at).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}</dd></div>}
-            <Field key={opened.id + "p"} label="Place" value={opened.place || ""} placeholder="Add a place" onSave={(v) => edit(opened, { place: v || null })} />
+            <div>
+              <dt>Place</dt>
+              <dd className="grow">
+                <PlaceInput key={opened.id + (opened.place || "")} className="inline" value={opened.place || ""} placeholder="Add a place"
+                  onText={(v) => edit(opened, { place: v || null })} onPick={(s) => edit(opened, { place: s.label, lat: s.lat, lng: s.lng })} />
+              </dd>
+            </div>
             {opened.lat !== null && opened.lng !== null && <div><dt>Position</dt><dd><a href={`https://www.google.com/maps?q=${opened.lat},${opened.lng}`} target="_blank" rel="noreferrer">{opened.lat.toFixed(4)}, {opened.lng.toFixed(4)}</a></dd></div>}
             <Field key={opened.id + "c"} label="Camera" value={opened.camera || ""} placeholder="Add a camera" onSave={(v) => edit(opened, { camera: v || null })} />
             <Field key={opened.id + "l"} label="Lens" value={opened.lens || ""} placeholder="Add a lens" onSave={(v) => edit(opened, { lens: v || null })} />
@@ -270,6 +283,10 @@ export function Photos() {
             {opened.rating !== null && <div><dt>Rating</dt><dd>{opened.rating} of 5</dd></div>}
             {opened.drive_folder && <div><dt>In Drive</dt><dd>{opened.drive_folder}</dd></div>}
           </dl>
+          <PinMap key={opened.id + String(opened.lat) + String(opened.lng)} lat={opened.lat} lng={opened.lng} onPick={async (lat, lng) => {
+            // A pin dropped on a photo with no place name fills the name in from the map.
+            await edit(opened, { lat, lng, ...(opened.place ? {} : { place: await nameOf(lat, lng) }) });
+          }} />
           {opened.keywords.length > 0 && <div className="tags">{opened.keywords.map((k) => <span key={k} className="pill-btn link">{k}</span>)}</div>}
           {confirmDelete
             ? <button type="button" className="ink" onClick={() => remove(opened)}>Confirm remove</button>

@@ -105,6 +105,19 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .inline { width: 100%; min-height: 32px; margin: -6px -10px -6px 0; padding: 0 10px; border: none; outline: none; border-radius: 999px; background: transparent; text-align: right; }
 .inline:hover, .inline:focus { background: var(--control); }
 .inline::placeholder { color: var(--grey); }
+.place { position: relative; display: block; width: 100%; }
+.spots { position: absolute; left: 0; right: 0; top: calc(100% + 6px); z-index: 6; display: flex; flex-direction: column; padding: 6px; border-radius: 16px; background: var(--control); text-align: left; }
+.spots button { min-height: 40px; padding: 6px 12px; border-radius: 12px; text-align: left; font-size: 14px; }
+.spots button:hover { background: var(--ground); }
+/* Map tiles in grey, so the only colour on screen is still the photographs. */
+.pinmap { width: 100%; display: flex; flex-direction: column; gap: 8px; }
+.pinmap-view { position: relative; height: 200px; border-radius: 2px; overflow: hidden; background: var(--control); cursor: crosshair; }
+.detail .pinmap-view img, .pinmap-view img { position: absolute; width: 256px; height: 256px; max-width: none; border-radius: 0; filter: grayscale(1) contrast(0.95); user-select: none; }
+.pin { position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 3px var(--ground); }
+.pinmap-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pinmap-bar > span:last-child { display: flex; flex: none; }
+.pinmap-bar .pill-btn { width: 44px; padding: 0; margin-left: 4px; font-size: 18px; }
+.pinmap-bar .pill-btn:disabled { opacity: 0.4; }
 .field { min-height: 44px; padding: 0 16px; border-radius: 999px; border: none; outline: none; background: var(--ground); width: 100%; }
 .adder-actions { align-items: center; }
 

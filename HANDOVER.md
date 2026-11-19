@@ -164,6 +164,12 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   in `public.photos`: date taken, GPS, typed place, camera, lens, settings, Lightroom rating and
   keywords, and the Drive link and folder. `lib/photo-read.ts` reads these with `exifr`.
 - A batch can be given one typed place, for cameras with no GPS.
+- **Places are real map positions.** The place box offers real places as he types (Photon, a free
+  OpenStreetMap lookup, called from the browser: `lib/places.ts`). Picking one stores its
+  position. The panel shows a small grey map with a pin; clicking the map moves the pin. A photo
+  with GPS and no name gets its name looked up. `components/PlaceMap.tsx`. The map is a fixed
+  grid of OpenStreetMap tiles with zoom buttons and no dragging. Tested on this Mac, not yet
+  with a real photo. A Map view of the whole collection was offered for later.
 - In a photo's panel Kofi can type over Taken (date), Place, Camera, Lens and Film, for what the
   file does not say. He scans film, so those files arrive with no camera and the wrong date.
   Changing the date does not move the original in Drive.
