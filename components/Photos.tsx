@@ -11,6 +11,7 @@ import { Logo } from "./Logo";
 import { PinMap, PlaceInput } from "./PlaceMap";
 import { PhotoMap } from "./PhotoMap";
 import { BigView } from "./BigView";
+import { ContactSheet } from "./ContactSheet";
 
 const NAME = process.env.NEXT_PUBLIC_APP_NAME || "Stash";
 const ROOT = "Stash Photos";
@@ -56,6 +57,8 @@ export function Photos() {
   const dragged = useRef(false); // true just after a drag, so the click that ends it does not open the photo
   const [only, setOnly] = useState(""); // show just this project
   const [view, setView] = useState<"grid" | "map">("grid");
+  const [sheet, setSheet] = useState(false); // the contact sheet is being printed
+  const closeSheet = useCallback(() => setSheet(false), []);
   const [inArchive, setInArchive] = useState(false); // looking at archived photos instead of live ones
   const [spot, setSpot] = useState<string[] | null>(null); // photos sharing one pin on the map
   const [waiting, setWaiting] = useState<File[] | null>(null); // a batch paused until Drive is reconnected
@@ -562,6 +565,9 @@ export function Photos() {
           ))}
         </div>
         <div className="bar" style={{ display: view === "map" ? "none" : undefined }}>
+          <button type="button" disabled={showing === 0 || sheet} onClick={() => setSheet(true)}>Contact sheet</button>
+        </div>
+        <div className="bar" style={{ display: view === "map" ? "none" : undefined }}>
           <button type="button" className={selecting ? "on" : ""} onClick={() => { if (selecting) stopSelecting(); else { setOpen(null); setSelecting(true); } }}>{selecting ? "Done selecting" : "Select"}</button>
         </div>
       </footer>
@@ -706,6 +712,16 @@ export function Photos() {
             })}
           </div>
         </aside>
+      )}
+
+      {sheet && (
+        <ContactSheet onDone={closeSheet}
+          title={only || (inArchive ? "Archive" : "Stash Photos")}
+          note={`${sequence.length} ${sequence.length === 1 ? "photograph" : "photographs"}${ordering ? ", in sequence" : ""}${stars ? `, ${stars} stars and up` : ""}${q.trim() ? `, matching "${q.trim()}"` : ""}  ·  ${new Date().toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}`}
+          photos={sequence.map((id, i) => {
+            const p = photos.find((x) => x.id === id)!;
+            return { id, name: p.name, rating: p.rating, url: p.thumb_path ? urls[p.thumb_path] : undefined, number: ordering ? sequenceOf(only).indexOf(id) + 1 : i + 1 };
+          })} />
       )}
 
       <datalist id="project-names">{projects.map((p) => <option key={p} value={p} />)}</datalist>

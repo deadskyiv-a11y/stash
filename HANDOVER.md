@@ -223,7 +223,13 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   same one step at a time, for the phone. The order is one row per project in
   `public.project_orders` (a list of photo ids); photos not yet placed follow, oldest first.
   The large view steps through in that order. Untried: drag and drop could not be driven from
-  here. A contact sheet PDF in this order was offered next.
+  here.
+- **Contact sheet.** "Contact sheet" in the bottom bar prints whatever is showing, in the order
+  shown: numbered thumbnails with file names and star ratings, 20 to an A4 page, with the
+  project name and date at the top. It is a print layout (`components/ContactSheet.tsx`,
+  `@media print` in `globals.css`), not a PDF library; Kofi chooses "Save as PDF" in the
+  browser's print box. Layout checked on this Mac by printing a 30-photo sample to PDF. Plain
+  on purpose: it is his own photo project, not an Upperfloor client document.
 - **Archive.** `archived` on the row. An archived photo leaves the grid, the map, search and the
   large view until "Archive N" in the bottom bar is switched on, which shows only archived
   photos. Archive or restore from a photo's panel, from the large view (button or the X key,
