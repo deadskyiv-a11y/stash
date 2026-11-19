@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Save to Stash",
+  "version": "1.0",
+  "description": "Saves the page you are on, or the text you have highlighted, to Stash.",
+  "permissions": ["activeTab", "scripting"],
+  "action": { "default_title": "Save to Stash" },
+  "background": { "service_worker": "background.js" },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+Shift+S", "mac": "Alt+Shift+S" },
+      "description": "Save this page or the highlighted text to Stash"
+    }
+  }
+}

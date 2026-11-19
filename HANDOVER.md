@@ -80,6 +80,9 @@ in the repository, never echo it, never commit it.
 - Quotes: with text highlighted on the page, the same button adds `&q=<text>&t=<page title>`.
   Stash saves that as a note that keeps the page's address as its source. Untried. Kofi must
   drag the button to his bookmarks bar again after any change to the bookmarklet code.
+- Kofi uses Arc, which has no bookmarks bar. `extension/` is a small Chrome extension that does
+  the same job as the bookmarklet: toolbar button or Option+Shift+S. Loaded unpacked from this
+  folder, so it must stay where it is. Untried.
 - Spotify saves also carry the artist, year and track list, read from Spotify's public embed
   page (`spotifyDetails` in `lib/fetch-page.ts`). Confirmed by Kofi.
 
