@@ -45,7 +45,10 @@ function SignIn() {
             email: email.trim(),
             options: { emailRedirectTo: window.location.origin, shouldCreateUser: true },
           });
-          if (error) { setState("error"); setMsg(error.message); } else setState("sent");
+          if (error) {
+            setState("error");
+            setMsg(/rate limit/i.test(error.message) ? "Too many sign-in emails in the last hour. Try again in an hour." : error.message);
+          } else setState("sent");
         }}
       >
         <h1><Logo height={44} title={NAME} /></h1>
