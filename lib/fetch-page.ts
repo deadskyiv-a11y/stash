@@ -1,5 +1,6 @@
-import { lookup } from "node:dns/promises";
+import { lookup as dnsLookup, type LookupAddress } from "node:dns";
 import { isIP } from "node:net";
+import { Agent, fetch as guardedFetch } from "undici";
 
 const UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
@@ -7,6 +8,7 @@ const UA =
 function privateV4(ip: string): boolean {
   const p = ip.split(".").map(Number);
   return (
+    p.length !== 4 || p.some((n) => !Number.isInteger(n)) ||
     p[0] === 0 || p[0] === 10 || p[0] === 127 ||
     (p[0] === 100 && p[1] >= 64 && p[1] <= 127) ||
     (p[0] === 169 && p[1] === 254) ||
@@ -16,27 +18,59 @@ function privateV4(ip: string): boolean {
   );
 }
 
-function privateIp(ip: string): boolean {
-  if (isIP(ip) === 4) return privateV4(ip);
+/**
+ * True for any address a saved link must never reach: loopback, private ranges, link-local, and every
+ * IPv6 form that can carry an IPv4 address inside it. Anything not recognised as a plain public address is refused.
+ */
+export function privateIp(ip: string): boolean {
+  const kind = isIP(ip);
+  if (kind === 4) return privateV4(ip);
+  if (kind !== 6) return true;
   const v = ip.toLowerCase();
-  if (v.startsWith("::ffff:")) return privateV4(v.slice(7));
-  return v === "::1" || v === "::" || v.startsWith("fc") || v.startsWith("fd") || v.startsWith("fe80");
+  return (
+    v.startsWith("::") ||                 // loopback, unspecified, IPv4-mapped (::ffff:...) and IPv4-compatible
+    v.startsWith("fc") || v.startsWith("fd") || // unique local
+    /^fe[89ab]/.test(v) ||                // link-local, fe80::/10
+    v.startsWith("64:ff9b:") ||           // NAT64, carries an IPv4 address
+    v.startsWith("2002:") ||              // 6to4, carries an IPv4 address
+    v.startsWith("ff")                    // multicast
+  );
 }
 
-/** Refuses anything that is not a public http(s) address, so a saved link can never reach internal systems. */
-async function assertPublic(url: URL) {
+/**
+ * Every outbound request for a saved link goes through this agent. It checks the address at the moment of
+ * connecting, so a name that answers "public" to one lookup and "internal" to the next cannot slip past.
+ */
+const guard = new Agent({
+  connect: {
+    lookup(hostname, options, callback) {
+      dnsLookup(hostname, { ...options, all: true }, (err, found) => {
+        const list = (found || []) as LookupAddress[];
+        if (err) return callback(err, "", 4);
+        if (list.length === 0 || list.some((a) => privateIp(a.address))) return callback(new Error("Address not allowed"), "", 4);
+        if ((options as { all?: boolean }).all) (callback as unknown as (e: null, a: LookupAddress[]) => void)(null, list);
+        else callback(null, list[0].address, list[0].family);
+      });
+    },
+  },
+});
+
+/** Refuses anything that is not a plain public http(s) address, before any connection is attempted. */
+function assertPublic(url: URL) {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("Only web links can be saved");
   const host = url.hostname.replace(/^\[|\]$/g, "");
   if (host === "localhost" || host.endsWith(".local") || host.endsWith(".internal")) throw new Error("Address not allowed");
-  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true });
-  if (addrs.length === 0 || addrs.some((a) => privateIp(a.address))) throw new Error("Address not allowed");
+  // A saved link never needs a bare IPv6 address, and those have too many disguises. A bare IPv4 address is checked.
+  if (isIP(host) === 6 || (isIP(host) === 4 && privateIp(host))) throw new Error("Address not allowed");
 }
 
-async function safeFetch(input: string, accept: string, maxBytes: number): Promise<{ res: Response; body: Buffer; finalUrl: string }> {
+async function safeFetch(input: string, accept: string, maxBytes: number, method: "GET" | "HEAD" = "GET"): Promise<{ type: string; body: Buffer; finalUrl: string }> {
   let url = new URL(input);
   for (let hop = 0; hop < 5; hop++) {
-    await assertPublic(url);
-    const res = await fetch(url, {
+    assertPublic(url);
+    const res = await guardedFetch(url, {
+      method,
+      dispatcher: guard,
       redirect: "manual",
       headers: { "User-Agent": UA, Accept: accept, "Accept-Language": "en" },
       signal: AbortSignal.timeout(12000),
@@ -49,16 +83,17 @@ async function safeFetch(input: string, accept: string, maxBytes: number): Promi
     const reader = res.body?.getReader();
     const chunks: Uint8Array[] = [];
     let size = 0;
-    if (reader) {
+    if (reader && method === "GET") {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
         size += value.length;
-        if (size > maxBytes) { await reader.cancel(); break; }
+        // Over the limit: refuse it. A cut-off page or picture is worse than none.
+        if (size > maxBytes) { await reader.cancel(); throw new Error("That page or picture is too large"); }
         chunks.push(value);
       }
     }
-    return { res, body: Buffer.concat(chunks), finalUrl: url.toString() };
+    return { type: res.headers.get("content-type") || "", body: Buffer.concat(chunks), finalUrl: url.toString() };
   }
   throw new Error("Too many redirects");
 }
@@ -130,7 +165,7 @@ async function fromOembed(input: string): Promise<Page | null> {
     if (hit[1] === "YouTube") {
       // The default YouTube thumbnail is letterboxed; the full-size one has no bars but not every video has it.
       const big = imageUrl.replace("hqdefault", "maxresdefault");
-      if (await fetch(big, { method: "HEAD", signal: AbortSignal.timeout(5000) }).then((r) => r.ok, () => false)) imageUrl = big;
+      if (await safeFetch(big, "image/*", 0, "HEAD").then(() => true, () => false)) imageUrl = big;
     }
     const spotify = hit[1] === "Spotify" ? await spotifyDetails(u) : null;
     const author = j.author_name || spotify?.artist;
@@ -172,13 +207,18 @@ async function fromOmdb(input: string): Promise<Page | null> {
   }
 }
 
+/** A page's picture address made absolute. A malformed one is dropped, so it cannot spoil the rest of the page read. */
+function pictureAddress(image: string | null, base: URL): string | null {
+  if (!image) return null;
+  try { return new URL(image, base).toString(); } catch { return null; }
+}
+
 export async function fetchPage(input: string): Promise<Page> {
   const embedded = (await fromOembed(input)) || (await fromOmdb(input));
   if (embedded) return embedded;
-  const { res, body, finalUrl } = await safeFetch(input, "text/html,application/xhtml+xml", 2_000_000);
+  const { type, body, finalUrl } = await safeFetch(input, "text/html,application/xhtml+xml", 2_000_000);
   const u = new URL(finalUrl);
   const site = u.hostname.replace(/^www\./, "");
-  const type = res.headers.get("content-type") || "";
   if (type.startsWith("image/")) {
     return { url: finalUrl, site, title: null, description: null, imageUrl: finalUrl, text: "" };
   }
@@ -195,15 +235,14 @@ export async function fetchPage(input: string): Promise<Page> {
     site: meta(html, ["og:site_name"]) || site,
     title: meta(html, ["og:title", "twitter:title"]) || (titleTag ? decode(titleTag[1]) : null),
     description: meta(html, ["og:description", "description", "twitter:description"]),
-    imageUrl: image ? new URL(image, u).toString() : null,
+    imageUrl: pictureAddress(image, u),
     text,
   };
 }
 
 export async function fetchImage(input: string): Promise<Buffer | null> {
   try {
-    const { res, body } = await safeFetch(input, "image/*", 8_000_000);
-    const type = res.headers.get("content-type") || "";
+    const { type, body } = await safeFetch(input, "image/*", 8_000_000);
     if (!type.startsWith("image/") || body.length === 0) return null;
     return body;
   } catch {

@@ -17,7 +17,8 @@ type Picture = { path: string; w: number; h: number; pale: boolean; forAi: Buffe
 /** Shrinks an image, stores it, and works out whether it is pale enough to need an edge on white. */
 async function storePicture(a: Authed, id: string, raw: Buffer, maxWidth: number): Promise<Picture | null> {
   try {
-    const base = sharp(raw, { failOn: "none", animated: false }).rotate();
+    // limitInputPixels: a small file can claim to be an enormous picture and exhaust the server's memory when opened.
+    const base = sharp(raw, { failOn: "none", animated: false, limitInputPixels: 80_000_000 }).rotate();
     const out = await base
       .clone()
       .resize({ width: maxWidth, withoutEnlargement: true })
@@ -49,7 +50,7 @@ async function storePicture(a: Authed, id: string, raw: Buffer, maxWidth: number
 }
 
 async function existingGroups(a: Authed) {
-  const { data } = await a.db.from("saves").select("cluster,subgroup").not("cluster", "is", null).limit(3000);
+  const { data } = await a.db.from("saves").select("cluster,subgroup").not("cluster", "is", null).order("created_at", { ascending: false }).limit(1000);
   const map = new Map<string, Set<string>>();
   for (const r of data || []) {
     if (!r.cluster || r.cluster === "Inbox") continue;
@@ -61,6 +62,8 @@ async function existingGroups(a: Authed) {
 
 /** Gives an existing save the picture Kofi supplied, for links whose site would not hand one over. */
 export async function setPicture(a: Authed, id: string, uploadPath: string): Promise<Save> {
+  const { data: row } = await a.db.from("saves").select("kind,url,site,title,summary,content,tags,cluster,subgroup,pinned").eq("id", id).maybeSingle();
+  if (!row) { await a.db.storage.from("saves").remove([uploadPath]); throw new Error("Could not find that save"); }
   const { data: file } = await a.db.storage.from("saves").download(uploadPath);
   if (!file) throw new Error("Could not read the picture");
   const picture = await storePicture(a, id, Buffer.from(await file.arrayBuffer()), 1600);
@@ -68,9 +71,9 @@ export async function setPicture(a: Authed, id: string, uploadPath: string): Pro
   if (!picture) throw new Error("Could not use that picture");
 
   // Read the save again with the screenshot, so the title, filing and search reflect what it shows.
-  const { data: row } = await a.db.from("saves").select("url,site,title,summary,content,tags,cluster,subgroup,pinned").eq("id", id).single();
+  // Not for a PDF: its title, summary and facts came from the document itself, and a picture alone would overwrite them with less.
   const text = row?.content || "";
-  const reading = await read({
+  const reading = row.kind === "file" ? null : await read({
     kind: "link", url: row?.url ?? null, site: row?.site ?? null, title: row?.title ?? null, description: row?.summary ?? null,
     text, image: { data: picture.forAi, mediaType: "image/jpeg" }, existing: await existingGroups(a),
   });
@@ -129,6 +132,8 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
   const { data: row, error } = await a.db.from("saves").insert(first).select("id").single();
   if (error || !row) throw new Error(error?.message || "Could not save");
   const id: string = row.id;
+  // Every file this save puts in storage, so a failure part-way can take them all away again.
+  const stored: string[] = [];
 
   try {
     let page: Page | null = null;
@@ -138,23 +143,29 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     let pdf: Buffer | null = null;
 
     if (input.kind === "voice") {
+      stored.push(input.path);
       const { data: file } = await a.db.storage.from("saves").download(input.path);
       if (!file) throw new Error("Could not read the recording.");
       const ext = audioExt(input.name);
       const to = `${a.userId}/${id}.${ext}`;
       const { error: mv } = await a.db.storage.from("saves").move(input.path, to);
       filePath = mv ? input.path : to;
+      stored.push(filePath);
+      // Recorded at once, so the recording is never left with nothing pointing to it if a later step is cut short.
+      await a.db.from("saves").update({ file_path: filePath }).eq("id", id);
       text = (await transcribe(Buffer.from(await file.arrayBuffer()), ext)) || "";
     } else if (input.kind === "file") {
       const { data: file } = await a.db.storage.from("saves").download(input.path);
       const buf = file ? Buffer.from(await file.arrayBuffer()) : null;
-      if (!buf || buf.subarray(0, 5).toString("latin1") !== "%PDF-") {
-        await a.db.storage.from("saves").remove([input.path]);
-        throw new Error("Only PDF documents can be saved for now.");
-      }
+      stored.push(input.path);
+      if (input.cover) stored.push(input.cover);
+      if (!buf) throw new Error("Could not read the uploaded file. Try again.");
+      if (buf.subarray(0, 5).toString("latin1") !== "%PDF-") throw new Error("Only PDF documents can be saved for now.");
       const to = `${a.userId}/${id}.pdf`;
       const { error: mv } = await a.db.storage.from("saves").move(input.path, to);
       filePath = mv ? input.path : to;
+      stored.push(filePath);
+      await a.db.from("saves").update({ file_path: filePath }).eq("id", id);
       // ponytail: the AI reads the PDF itself, up to 15 MB. No text is extracted for search beyond its summary and facts; add a text extractor if answers need the full wording.
       if (buf.length <= 15 * 1024 * 1024) pdf = buf;
       // The browser drew the first page and uploaded it. Keep it as the tile picture.
@@ -181,10 +192,11 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
       }
     } else if (input.kind === "image") {
       const { data: file } = await a.db.storage.from("saves").download(input.path);
-      if (file) {
-        picture = await storePicture(a, id, Buffer.from(await file.arrayBuffer()), 1600);
-        if (picture && picture.path !== input.path) await a.db.storage.from("saves").remove([input.path]);
-      }
+      stored.push(input.path);
+      if (file) picture = await storePicture(a, id, Buffer.from(await file.arrayBuffer()), 1600);
+      // A picture the server cannot open (an iPhone HEIC file, for one) must fail out loud, not arrive as a blank save.
+      if (!picture) throw new Error("Stash could not open that image. Try a JPEG or PNG.");
+      await a.db.storage.from("saves").remove([input.path]);
     } else {
       text = input.text;
     }
@@ -245,7 +257,11 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     if (upErr || !done) throw new Error(upErr?.message || "Could not finish the save");
     return done as unknown as Save;
   } catch (e) {
-    await a.db.from("saves").update({ status: "failed", cluster: "Unsorted" }).eq("id", id);
+    // A save that could not be finished is taken away whole, files and all, so nothing half made is left behind
+    // to reappear blank later. Kofi sees the reason and can try again.
+    const leftovers = [...new Set([...stored, `${a.userId}/${id}.webp`])];
+    await a.db.storage.from("saves").remove(leftovers).catch(() => null);
+    await a.db.from("saves").delete().eq("id", id);
     throw e;
   }
 }

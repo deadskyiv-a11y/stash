@@ -18,6 +18,12 @@ type Gis = { accounts: { oauth2: { initTokenClient(o: { client_id: string; scope
 let token: { value: string; exp: number } | null = null;
 const folders = new Map<string, string>();
 
+/** Forgets a pass Google has turned away, in memory and in the tab's storage, so the app offers to reconnect. */
+function drop() {
+  token = null;
+  try { sessionStorage.removeItem(KEY); } catch { /* private window */ }
+}
+
 export const driveConfigured = () => CLIENT_ID !== "";
 
 export function driveConnected(): boolean {
@@ -67,7 +73,7 @@ export async function connectDrive(fresh = false): Promise<boolean> {
 async function api(url: string, init: RequestInit = {}): Promise<Record<string, unknown>> {
   if (!driveConnected()) throw new Error("Google Drive is not connected.");
   const res = await fetch(url, { ...init, headers: { ...(init.headers || {}), Authorization: `Bearer ${token!.value}` } });
-  if (res.status === 401) { token = null; try { sessionStorage.removeItem(KEY); } catch { /* ignore */ } throw new Error("Google Drive needs connecting again."); }
+  if (res.status === 401) { drop(); throw new Error("Google Drive needs connecting again."); }
   if (!res.ok) throw new Error(`Google Drive answered with ${res.status}.`);
   return res.json();
 }
@@ -112,7 +118,7 @@ export function uploadToDrive(file: File, folderId: string, onProgress?: (sent: 
     x.upload.onprogress = (e) => onProgress?.(Math.min(file.size, e.loaded));
     x.onerror = () => fail(new Error("The upload was cut off. Check the connection."));
     x.onload = () => {
-      if (x.status === 401) { token = null; try { sessionStorage.removeItem(KEY); } catch { /* ignore */ } return fail(new Error("Google Drive needs connecting again.")); }
+      if (x.status === 401) { drop(); return fail(new Error("Google Drive needs connecting again.")); }
       if (x.status < 200 || x.status >= 300) return fail(new Error(`Google Drive answered with ${x.status}.`));
       try {
         const made = JSON.parse(x.responseText) as { id: string; webViewLink?: string };
@@ -128,7 +134,7 @@ export function uploadToDrive(file: File, folderId: string, onProgress?: (sent: 
 export async function downloadFromDrive(id: string): Promise<Blob> {
   if (!driveConnected()) throw new Error("Google Drive is not connected.");
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media`, { headers: { Authorization: `Bearer ${token!.value}` } });
-  if (res.status === 401) { token = null; throw new Error("Google Drive needs connecting again."); }
+  if (res.status === 401) { drop(); throw new Error("Google Drive needs connecting again."); }
   if (!res.ok) throw new Error(`Google Drive answered with ${res.status}.`);
   return res.blob();
 }
@@ -137,8 +143,14 @@ export async function downloadFromDrive(id: string): Promise<Blob> {
 export async function streamFromDrive(id: string, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> {
   if (!driveConnected()) throw new Error("Google Drive needs connecting again.");
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media`, { headers: { Authorization: `Bearer ${token!.value}` }, signal });
-  if (res.status === 401) { token = null; throw new Error("Google Drive needs connecting again."); }
+  if (res.status === 401) { drop(); throw new Error("Google Drive needs connecting again."); }
   if (res.status === 404) throw new Error("An original is no longer in Drive.");
   if (!res.ok || !res.body) throw new Error(`Google Drive answered with ${res.status}.`);
   return res.body;
+}
+
+/** Removes a file Stash itself put in Drive. Used to tidy up when an upload reached Drive but could not be recorded. */
+export async function deleteFromDrive(id: string): Promise<void> {
+  if (!driveConnected()) return;
+  await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}`, { method: "DELETE", headers: { Authorization: `Bearer ${token!.value}` } }).catch(() => null);
 }

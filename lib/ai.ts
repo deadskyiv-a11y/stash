@@ -17,6 +17,11 @@ const MODEL = process.env.ANTHROPIC_MODEL || "claude-haiku-5-5";
 // the answer can be used up before any answer is written, which shows up as an empty reply. So every call
 // below asks for low effort (short thinking, right for filing and tagging) and leaves room in max_tokens.
 
+/** One request is given 90 seconds and one retry. The library's own default is ten minutes, far longer than a save can wait. */
+function claude(): Anthropic {
+  return new Anthropic({ timeout: 90_000, maxRetries: 1 });
+}
+
 export function aiEnabled(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
 }
@@ -70,7 +75,7 @@ export async function read(input: {
   existing: { cluster: string; subgroups: string[] }[];
 }): Promise<Reading | null> {
   if (!aiEnabled()) return null;
-  const client = new Anthropic();
+  const client = claude();
   const existing = input.existing.length
     ? input.existing.map((c) => `- ${c.cluster}: ${c.subgroups.join(", ") || "(no subgroups yet)"}`).join("\n")
     : "(none yet)";
@@ -148,7 +153,7 @@ export async function tidy(
   if (!aiEnabled()) return null;
   const lines = items.map((i) => `${i.n}. [${i.cluster || "Unsorted"}${i.subgroup ? " / " + i.subgroup : ""}] ${(i.title || "Untitled").slice(0, 100)} | ${(i.summary || "").slice(0, 160)} | ${i.tags.join(", ")}`);
   try {
-    const msg = await new Anthropic().messages.create({
+    const msg = await claude().messages.create({
       model: MODEL,
       max_tokens: 10000,
       output_config: { effort: "low" },
@@ -195,7 +200,7 @@ export async function answer(
     s.content ? `Text: ${s.content.slice(0, 1500)}` : "",
   ].filter(Boolean).join("\n"));
   try {
-    const msg = await new Anthropic().messages.create({
+    const msg = await claude().messages.create({
       model: MODEL,
       max_tokens: 2500,
       output_config: { effort: "low" },
@@ -228,7 +233,7 @@ Rules:
 export async function tagPhoto(image: Buffer, subjects: string[], place: string | null, shoot: string | null): Promise<{ subject: string; tags: string[]; caption: string; usage: { in: number; out: number } } | null> {
   if (!aiEnabled()) return null;
   try {
-    const msg = await new Anthropic().messages.create({
+    const msg = await claude().messages.create({
       model: MODEL,
       max_tokens: 2500,
       output_config: { effort: "low" },
@@ -264,7 +269,7 @@ export async function recipeFor(input: { title: string | null; summary: string |
   if (input.image) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: input.image.toString("base64") } });
   content.push({ type: "text", text: `<item>\n${[input.title ? `Title: ${input.title}` : "", input.site ? `Site: ${input.site}` : "", input.summary ? `Summary: ${input.summary}` : "", input.text ? `Text:\n${input.text.slice(0, 5000)}` : ""].filter(Boolean).join("\n")}\n</item>` });
   try {
-    const msg = await new Anthropic().messages.create({
+    const msg = await claude().messages.create({
       model: MODEL,
       max_tokens: 4000,
       output_config: { effort: "low" },

@@ -1,21 +1,24 @@
 import { authed } from "@/lib/server";
 import { createSave, makeRecipe, setPicture, type NewSave } from "@/lib/process";
 
-export const maxDuration = 60;
+// Reading a long voice note or a large PDF can take well over a minute. Cut off early, a save was left half made.
+export const maxDuration = 300;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: Request) {
   const a = await authed(req);
   if (!a) return Response.json({ error: "Not signed in, or not the owner of this app." }, { status: 401 });
 
   const body = await req.json().catch(() => null);
-  if (body?.kind === "picture" && typeof body.id === "string" && typeof body.path === "string" && body.path.startsWith(`${a.userId}/upload-`)) {
+  if (body?.kind === "picture" && typeof body.id === "string" && UUID.test(body.id) && typeof body.path === "string" && body.path.startsWith(`${a.userId}/upload-`)) {
     try {
       return Response.json({ save: await setPicture(a, body.id, body.path) });
     } catch (e) {
       return Response.json({ error: e instanceof Error ? e.message : "Could not add the picture" }, { status: 500 });
     }
   }
-  if (body?.kind === "recipe" && typeof body.id === "string") {
+  if (body?.kind === "recipe" && typeof body.id === "string" && UUID.test(body.id)) {
     try {
       return Response.json({ save: await makeRecipe(a, body.id) });
     } catch (e) {
@@ -40,7 +43,8 @@ export async function POST(req: Request) {
         if (typeof body.from === "string") input.from = body.from.slice(0, 200);
       }
     } catch { /* no source */ }
-  } else if ((body?.kind === "image" || body?.kind === "file" || body?.kind === "voice") && typeof body.path === "string" && body.path.startsWith(`${a.userId}/`)) {
+  } else if ((body?.kind === "image" || body?.kind === "file" || body?.kind === "voice") && typeof body.path === "string" && body.path.startsWith(`${a.userId}/upload-`)) {
+    // Only a fresh upload may be named here. The server moves or deletes this file, so it must never be an existing save's file.
     input = { kind: body.kind, path: body.path, name: typeof body.name === "string" ? body.name.slice(0, 120) : undefined };
     if (input.kind === "file" && typeof body.cover === "string" && body.cover.startsWith(`${a.userId}/upload-`)) input.cover = body.cover;
   }

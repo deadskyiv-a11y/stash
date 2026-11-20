@@ -1,7 +1,7 @@
 import { authed } from "@/lib/server";
 import { tagPhoto } from "@/lib/ai";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const COLUMNS = "id,tags,caption,subject,tagged";
 
@@ -18,7 +18,7 @@ export async function POST(req: Request) {
   const { data: file } = await a.db.storage.from("saves").download(photo.thumb_path);
   if (!file) return Response.json({ error: "Could not open the thumbnail." }, { status: 500 });
 
-  const { data: rows } = await a.db.from("photos").select("subject").not("subject", "is", null).limit(2000);
+  const { data: rows } = await a.db.from("photos").select("subject").not("subject", "is", null).order("created_at", { ascending: false }).limit(1000);
   const subjects = [...new Set((rows || []).map((r) => r.subject as string))];
 
   // How the rest of the same shoot was filed: photos taken within three hours either side of this one.
@@ -38,10 +38,15 @@ export async function POST(req: Request) {
   const { data: done, error } = await a.db
     .from("photos")
     // A subject Kofi set by hand is kept.
-    .update({ tags: out.tags, caption: out.caption, subject: photo.subject || out.subject, tagged: true, ai_in: out.usage.in, ai_out: out.usage.out })
+    .update({ tags: out.tags, caption: out.caption, tagged: true, ai_in: out.usage.in, ai_out: out.usage.out })
     .eq("id", id)
     .select(COLUMNS)
     .single();
   if (error || !done) return Response.json({ error: error?.message || "Could not save the tags." }, { status: 500 });
+  // The subject is filled in only where it is still empty at this moment, so one typed by hand while the AI was looking is kept.
+  const { data: filled } = await a.db.from("photos").update({ subject: out.subject }).eq("id", id).is("subject", null).select(COLUMNS).maybeSingle();
+  if (filled) return Response.json({ photo: filled });
+  const { data: now } = await a.db.from("photos").select(COLUMNS).eq("id", id).single();
+  if (now) return Response.json({ photo: now });
   return Response.json({ photo: done });
 }

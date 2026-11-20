@@ -57,7 +57,7 @@ function SignIn() {
           setState("sending");
           const { error } = await supabase().auth.signInWithOtp({
             email: email.trim(),
-            options: { emailRedirectTo: window.location.origin, shouldCreateUser: true },
+            options: { emailRedirectTo: window.location.origin, shouldCreateUser: false },
           });
           if (error) {
             setState("error");
@@ -106,6 +106,7 @@ function Library() {
   const router = useRouter();
   const [saves, setSaves] = useState<Save[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const [urls, setUrls] = useState<Record<string, string>>({});
   const [q, setQ] = useState("");
   const [type, setType] = useState<TypeFilter>("all");
@@ -133,13 +134,24 @@ function Library() {
 
   // Load everything once.
   useEffect(() => {
-    supabase().from("saves").select(SAVE_COLUMNS).order("created_at", { ascending: false }).limit(5000)
-      .then(({ data, error }) => {
-        if (error) say("Could not load your saves. " + error.message);
-        setSaves((data as unknown as Save[]) || []);
-        setLoaded(true);
-      });
-  }, [say]);
+    (async () => {
+      // The database hands back at most 1,000 rows a time, so keep asking until a short page comes back.
+      const all: Save[] = [];
+      let failed = "";
+      for (let from = 0; ; from += 1000) {
+        const { data, error } = await supabase().from("saves").select(SAVE_COLUMNS)
+          .order("created_at", { ascending: false }).order("id").range(from, from + 999);
+        if (error) { failed = error.message; break; }
+        all.push(...((data as unknown as Save[]) || []));
+        if (!data || data.length < 1000) break;
+      }
+      // A save still marked as being read long after it was made was cut short. Show it as it is, not as "Reading" for ever.
+      const old = Date.now() - 10 * 60 * 1000;
+      setSaves(all.map((s) => (s.status === "processing" && new Date(s.created_at).getTime() < old ? { ...s, status: "failed" } : s)));
+      setLoadError(failed);
+      setLoaded(true);
+    })();
+  }, []);
 
   // Private images need a short-lived signed address each.
   useEffect(() => {
@@ -221,27 +233,53 @@ function Library() {
     else add({ kind: "note", text: t }, t.slice(0, 60));
   }, [add]);
 
-  // The iPhone share button opens Stash at /#save=<link>. Save it once, then clean the address.
-  // ponytail: rides on the browser's own sign-in, so it opens Stash each time. A background save needs a personal token.
-  const shared = useRef(false);
+  // The share key. Stash saves a link handed to it in the address only when the address also carries this
+  // private key, which the bookmark button, the Arc extension and the iPhone Shortcut each hold. Without it,
+  // any web page could make the owner's browser save things. The key lives on the account, so every device has it.
+  const [saveKey, setSaveKey] = useState("");
   useEffect(() => {
-    if (shared.current) return;
-    shared.current = true;
+    (async () => {
+      const { data } = await supabase().auth.getUser();
+      let key = typeof data.user?.user_metadata?.save_key === "string" ? (data.user.user_metadata.save_key as string) : "";
+      if (data.user && key.length < 20) {
+        key = crypto.randomUUID().replace(/-/g, "");
+        await supabase().auth.updateUser({ data: { save_key: key } });
+      }
+      setSaveKey(key);
+      // The extension reads this once, the first time it is used, so it never has to be typed in.
+      document.documentElement.dataset.sk = key;
+    })();
+  }, []);
+
+  // Something handed over in the address: /#save=<link>&k=<key>, with an optional picture, quote and page title.
+  type Incoming = { link: string; img: string | null; quote: string; from?: string; k: string };
+  const [incoming, setIncoming] = useState<Incoming | null>(null);
+  const [asking, setAsking] = useState<Incoming | null>(null);
+  useEffect(() => {
     const params = new URLSearchParams(window.location.hash.slice(1));
     const link = params.get("save");
     if (!link) return;
-    const img = params.get("img");
-    const quote = (params.get("q") || "").trim();
-    const from = params.get("t") || undefined;
-    const url = looksLikeUrl(link.trim());
     history.replaceState(null, "", window.location.pathname);
-    queueMicrotask(() => {
-      // Highlighted text arrives as a quote that remembers its page. Otherwise it is the page itself.
-      if (url && quote) add({ kind: "note", text: quote, url, from }, quote.slice(0, 60));
-      else if (url && img) add({ kind: "link", url, image: img }, url);
-      else addText(link);
-    });
+    queueMicrotask(() => setIncoming({ link, img: params.get("img"), quote: (params.get("q") || "").trim(), from: params.get("t") || undefined, k: params.get("k") || "" }));
+  }, []);
+
+  const takeIn = useCallback((x: Incoming) => {
+    const url = looksLikeUrl(x.link.trim());
+    // Highlighted text arrives as a quote that remembers its page. Otherwise it is the page itself.
+    if (url && x.quote) add({ kind: "note", text: x.quote, url, from: x.from }, x.quote.slice(0, 60));
+    else if (url && x.img) add({ kind: "link", url, image: x.img }, url);
+    else addText(x.link);
   }, [add, addText]);
+
+  useEffect(() => {
+    if (!incoming || !saveKey) return;
+    const x = incoming;
+    queueMicrotask(() => {
+      setIncoming(null);
+      // The right key: save without a word. No key, or a wrong one: ask first.
+      if (x.k === saveKey) takeIn(x); else setAsking(x);
+    });
+  }, [incoming, saveKey, takeIn]);
 
   const addFiles = useCallback(async (files: File[]) => {
     const { data } = await supabase().auth.getUser();
@@ -462,7 +500,14 @@ function Library() {
         </div>
       )}
 
-      {loaded && saves.length === 0 && (
+      {loaded && loadError && (
+        <div className="empty">
+          <h2>Could not load your saves</h2>
+          <p>{loadError}. Reload the page to try again.</p>
+        </div>
+      )}
+
+      {loaded && !loadError && saves.length === 0 && (
         <div className="empty">
           <h2>Nothing saved yet</h2>
           <p>Paste a link, drop an image or PDF, record a voice note, or press Save.</p>
@@ -476,9 +521,10 @@ function Library() {
           {menu && <Link className="pill-btn link phone-only" href="/photos">Photos</Link>}
           {menu && <button type="button" className="pill-btn" onClick={() => supabase().auth.signOut()}>Sign out</button>}
           {/* The browser button: dragged to the bookmarks bar, it sends the page being viewed, and its picture, to Stash. */}
-          {menu && (
+          {menu && saveKey && <button type="button" className="pill-btn" onClick={() => navigator.clipboard.writeText(saveKey).then(() => say("Share key copied."), () => say("Could not copy. " + saveKey))}>Copy share key</button>}
+          {menu && saveKey && (
             <a className="pill-btn bookmarklet" title="Drag this to your bookmarks bar" draggable
-              ref={(el) => { el?.setAttribute("href", `javascript:(()=>{const q=s=>document.querySelector(s);const s=String(getSelection()).trim().slice(0,4000);const i=(q('meta[property="og:image"]')||{}).content||(q('video[poster]')||{}).poster||'';window.open('${window.location.origin}/#save='+encodeURIComponent(location.href)+(i?'&img='+encodeURIComponent(i):'')+(s?'&q='+encodeURIComponent(s)+'&t='+encodeURIComponent(document.title.slice(0,200)):''),'_blank')})()`); }}
+              ref={(el) => { el?.setAttribute("href", `javascript:(()=>{const q=s=>document.querySelector(s);const s=String(getSelection()).trim().slice(0,4000);const i=(q('meta[property="og:image"]')||{}).content||(q('video[poster]')||{}).poster||'';window.open('${window.location.origin}/#k=${saveKey}&save='+encodeURIComponent(location.href)+(i?'&img='+encodeURIComponent(i):'')+(s?'&q='+encodeURIComponent(s)+'&t='+encodeURIComponent(document.title.slice(0,200)):''),'_blank')})()`); }}
               onClick={(e) => { e.preventDefault(); say("Drag this button onto your bookmarks bar."); }}>Save to Stash</a>
           )}
         </div>
@@ -500,6 +546,17 @@ function Library() {
             const s = saves.find((x) => x.id === id);
             return s ? <button key={id} type="button" className="pill-btn" onClick={() => { setConfirmDelete(false); setOpen(id); }}>{s.title || s.site || "Untitled"}</button> : null;
           })}
+        </section>
+      )}
+
+      {asking && (
+        <section className="answer" aria-live="polite" aria-label="Save this?">
+          <p>Something asked Stash to save this. It did not come from your own share button.</p>
+          <p className="meta" style={{ overflowWrap: "anywhere" }}>{asking.quote ? "\u201C" + asking.quote.slice(0, 200) + "\u201D  ·  " : ""}{asking.link.slice(0, 200)}</p>
+          <div className="adder-actions" style={{ width: "100%" }}>
+            <button type="button" className="pill-btn" onClick={() => setAsking(null)}>Ignore</button>
+            <button type="button" className="ink" onClick={() => { const x = asking; setAsking(null); takeIn(x); }}>Save it</button>
+          </div>
         </section>
       )}
 

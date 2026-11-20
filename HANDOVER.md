@@ -292,6 +292,46 @@ account: no saves seen, no files seen, inserts and updates blocked.
 - The fix for a touch tap landing on the newly opened panel. It was a best guess at what Kofi
   called "a bit buggy" when opening a save on the phone.
 
+## 5b. Review of 20 November 2026
+
+Two reviewers read the code, one for design and one for bugs and security. The lock held: no
+way in for anyone but the owner, no secret in the code or its history. What was fixed that day:
+
+- **Link guard** (`lib/fetch-page.ts`): it missed IPv6 forms that carry an IPv4 address, and a
+  name could answer "public" to the check and "internal" to the fetch. Every outbound request
+  now goes through an `undici` agent that checks the address at the moment of connecting, bare
+  IPv6 hosts are refused, and a page or picture over the size limit is refused, not cut short.
+  Tested on this Mac, including a name pointing at a live local server.
+- **Share key.** `/#save=` used to save anything handed to it, so any web page could plant saves.
+  It now saves silently only when the address carries the owner's key (`k=`), kept in his
+  Supabase user metadata as `save_key`. Anything else gets a "Save it / Ignore" card. The
+  bookmarklet carries the key. The extension (v1.2) reads it from the Stash page the first time
+  it is used and keeps it in its own storage. The iPhone Shortcut needs the key typed into its
+  address once: "Copy share key" is in the logo menu. Untried.
+- `shouldCreateUser` is false. A `Cross-Origin-Opener-Policy` header is set. Upload paths must
+  start `upload-`, and ids must be UUIDs. The Drive pass is dropped the same way everywhere.
+- **Saves past 1,000** now load (the database returns 1,000 rows a call). Load failures show a
+  message, not "Nothing saved yet".
+- **A save that fails is removed whole**, files and row, so nothing half made reappears. A
+  recording's or PDF's `file_path` is written as soon as the file is in place. Functions run up
+  to 300 seconds, and each AI call gets 90 seconds and one retry.
+- An image the server cannot open now fails with a message. Changing a PDF's picture no longer
+  re-reads it and wipes its facts. Tidy applies moves in groups.
+- **Photo room:** a failed record after a Drive upload retries, then removes the original and
+  thumbnails. A second batch cannot start over a running one. AI reading stops when the room is
+  left. A missing large preview is requested once.
+
+**Not yet fixed, from the same review:**
+- Design: on the phone, the large view's Close button may sit off screen, the photo grid's first
+  heading sits behind the search box, and the grid crops pictures. Rating stars and some buttons
+  are under 44px, unlit stars are too pale, ink and grey buttons differ in size, disabled buttons
+  look enabled, a map note floats over panels, sign-in error text is red and the map credit link
+  is blue. The two rooms' headers differ and the photo room has no Sign out.
+- Bugs: signed picture addresses are never renewed (a tab left open overnight shows blanks);
+  export fails whole on one missing original and does not name it; a stale search reply can
+  replace a newer one; a Drive sign-in window left open hangs a batch; no Content-Security-Policy.
+- Dashboard, his to do: longer sign-in codes and shorter expiry in Supabase.
+
 ## 6. Things that bit us
 
 - **An empty AI reply means the model ran out of room.** `claude-haiku-5-5` thinks before it

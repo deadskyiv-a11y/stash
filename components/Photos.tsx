@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, supabase } from "@/lib/supabase-browser";
-import { connectDrive, downloadFromDrive, driveConfigured, driveConnected, driveMinutesLeft, ensureFolder, streamFromDrive, uploadToDrive } from "@/lib/drive";
+import { connectDrive, deleteFromDrive, downloadFromDrive, driveConfigured, driveConnected, driveMinutesLeft, ensureFolder, streamFromDrive, uploadToDrive } from "@/lib/drive";
 import { chooseZipPlace, uniqueNames, writeZip } from "@/lib/export-zip";
 import { readPhoto } from "@/lib/photo-read";
 import { nameOf } from "@/lib/places";
@@ -81,6 +81,10 @@ export function Photos() {
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState<Upload | null>(null);
   const halt = useRef(false); // set by Stop: finish the photo in hand, then end the batch
+  const running = useRef(false); // a batch or an export is under way; a second one must wait
+  const alive = useRef(true); // false once this room is left, so background loops stop
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+  const asked = useRef(new Set<string>()); // large previews already requested, so a missing one is not asked for again and again
   const exporting = useRef<AbortController | null>(null);
   const [toast, setToast] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -104,7 +108,7 @@ export function Photos() {
       // The database hands back 1,000 rows at a time.
       const all: Photo[] = [];
       for (let from = 0; ; from += 1000) {
-        const { data, error } = await supabase().from("photos").select(COLUMNS).order("taken_at", { ascending: false, nullsFirst: false }).range(from, from + 999);
+        const { data, error } = await supabase().from("photos").select(COLUMNS).order("taken_at", { ascending: false, nullsFirst: false }).order("id").range(from, from + 999);
         if (error) { say("Could not load your photos. " + error.message); break; }
         all.push(...((data as unknown as Photo[]) || []));
         if (!data || data.length < 1000) break;
@@ -136,6 +140,8 @@ export function Photos() {
     (async () => {
       let failures = 0;
       for (const p of todo) {
+        // Leaving the room ends this loop. Coming back starts a new one, and two would read, and bill, every photo twice.
+        if (!alive.current) return;
         // After three failures in a row the AI is taken to be unavailable; the rest are tried again on the next visit.
         if (failures < 3) {
           try {
@@ -152,6 +158,7 @@ export function Photos() {
   const deposit = useCallback(async (files: File[]) => {
     const picked = files.filter((f) => f.type.startsWith("image/") || /\.(raf|cr2|cr3|nef|arw|dng|orf|rw2|heic|heif|tif|tiff)$/i.test(f.name));
     if (picked.length === 0) { say("Those are not pictures."); return; }
+    if (running.current) { say("An upload or export is already running. Add these when it finishes."); return; }
     // Start a batch on a fresh pass, so it has the full hour. If the browser blocks Google's window, hold the batch.
     if (driveMinutesLeft() < 20 && !(await connectDrive(true))) { setAdding(false); setConnected(driveConnected()); setWaiting(picked); return; }
     setConnected(true);
@@ -164,6 +171,7 @@ export function Photos() {
     const size = picked.reduce((n, f) => n + f.size, 0), started = Date.now();
     let before = 0;
     halt.current = false;
+    running.current = true;
     setBusy({ done, total: picked.length, name: picked[0].name, sent: 0, size, secs: 0, stopping: false });
     setAdding(false);
     let held = 0;
@@ -197,13 +205,28 @@ export function Photos() {
           const up = await supabase().storage.from("saves").upload(view, info.view, { contentType: "image/jpeg" });
           if (up.error) view = null;
         }
-        const { data: row, error } = await supabase().from("photos").insert({
+        const record = {
           id, name: f.name, bytes: f.size, drive_id: drive.id, drive_link: drive.link, drive_folder: folder.join(" / "),
           thumb_path: thumb, view_path: view, w: info.w, h: info.h, taken_at: info.takenAt, lat, lng, place: named,
           camera: info.camera, lens: info.lens, settings: info.settings, rating: info.rating, keywords: info.keywords,
-        }).select(COLUMNS).single();
-        if (error || !row) throw new Error(error?.message || "Could not record the photo");
-        setPhotos((all) => [row as unknown as Photo, ...all]);
+        };
+        // The original is in Drive by now. Try the record up to three times before giving up.
+        let row: Photo | null = null, why = "";
+        for (let attempt = 0; attempt < 3 && !row; attempt++) {
+          if (attempt) await new Promise((r) => setTimeout(r, 1500 * attempt));
+          const res = await supabase().from("photos").insert(record).select(COLUMNS).single();
+          if (res.data) row = res.data as unknown as Photo; else why = res.error?.message || "";
+        }
+        if (!row) {
+          // Still no record: take the original back out of Drive and remove the thumbnails, so nothing is left
+          // unlisted and a later retry does not make a second copy.
+          await deleteFromDrive(drive.id);
+          const made = [thumb, view].filter((x): x is string => !!x);
+          if (made.length) await supabase().storage.from("saves").remove(made);
+          throw new Error(why || "Could not record the photo");
+        }
+        const added = row;
+        setPhotos((all) => [added, ...all]);
       } catch (e) {
         console.error("Photo failed", f.name, e);
         // Drive turned the pass away mid-batch: hold this photo and the rest, to carry on after a reconnect.
@@ -217,6 +240,7 @@ export function Photos() {
       }
     }
     setBusy(null);
+    running.current = false;
     const ok = done - skipped - failed;
     if (held) { say(`Paused. ${held} ${held === 1 ? "photo is" : "photos are"} waiting for Google Drive.`); return; }
     say([`${ok} ${ok === 1 ? "photo" : "photos"} added.`, skipped ? `${skipped} already here.` : "", failed ? `${failed} failed.` : ""].filter(Boolean).join(" "));
@@ -309,8 +333,9 @@ export function Photos() {
   useEffect(() => {
     if (!big || at < 0) return;
     const need = [0, 1, -1].map((d) => photos.find((p) => p.id === sequence[(at + d + sequence.length) % sequence.length])?.view_path)
-      .filter((p): p is string => !!p && !views[p]);
+      .filter((p): p is string => !!p && !views[p] && !asked.current.has(p));
     if (need.length === 0) return;
+    need.forEach((p) => asked.current.add(p));
     supabase().storage.from("saves").createSignedUrls([...new Set(need)], 60 * 60 * 6).then(({ data }) => {
       if (data) setViews((v) => ({ ...v, ...Object.fromEntries(data.filter((d) => d.signedUrl && d.path).map((d) => [d.path as string, d.signedUrl as string])) }));
     });
@@ -458,6 +483,7 @@ export function Photos() {
   const exportPhotos = async (ids: string[], label: string, numbered: boolean) => {
     const list = ids.map((id) => photos.find((p) => p.id === id)).filter((p): p is Photo => !!p && !!p.drive_id);
     if (list.length === 0) { say("There are no originals to export."); return; }
+    if (running.current) { say("An upload or export is already running."); return; }
     // Google's window and the save box each need their own click, so a stale Drive pass is renewed first and Export pressed again.
     if (driveMinutesLeft() < 20) {
       const ok = await connectDrive(true);
@@ -473,6 +499,7 @@ export function Photos() {
     const size = list.reduce((n, p) => n + (p.bytes || 0), 0), started = Date.now();
     const ctl = new AbortController();
     exporting.current = ctl;
+    running.current = true;
     setBusy({ done: 0, total: list.length, name: list[0].name, sent: 0, size, secs: 0, stopping: false, verb: "Exporting" });
     try {
       await writeZip(
@@ -486,6 +513,7 @@ export function Photos() {
       say(ctl.signal.aborted ? "Export stopped. The zip was not finished." : e instanceof Error ? e.message + " The zip was not finished." : "The export failed.");
     }
     exporting.current = null;
+    running.current = false;
     setBusy(null);
   };
 
