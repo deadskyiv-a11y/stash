@@ -288,12 +288,17 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 
 /* Contact sheet. Nothing on screen; on paper it is the only thing there. */
 .sheet { display: none; }
-@page { size: A4 portrait; margin: 12mm; }
+/* The paper margin is drawn by the sheet itself (side padding, and empty strips repeated at the top and bottom of
+   every page), not left to the print box, where a "no margins" setting would print edge to edge. */
+@page { size: A4 portrait; margin: 0; }
 @media print {
   html, body { height: auto; overflow: visible; background: #fff; }
   .app { position: static; }
   .app > *:not(.sheet) { display: none !important; }
   .sheet { display: block; color: #111; font-family: var(--sans); }
+  .sheet table { width: 100%; border-collapse: collapse; }
+  .sheet td { padding: 0 14mm; }
+  .sheet-gap { height: 14mm; }
   .sheet header { display: flex; align-items: baseline; justify-content: space-between; gap: 8mm; padding-bottom: 3mm; margin-bottom: 5mm; border-bottom: 0.3mm solid #111; }
   .sheet h1 { margin: 0; font: 500 16pt/1.2 var(--tight); }
   .sheet header p { margin: 0; font-size: 8pt; color: #666; text-align: right; }

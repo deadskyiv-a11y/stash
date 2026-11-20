@@ -27,19 +27,31 @@ export function ContactSheet({ title, note, photos, onDone }: { title: string; n
 
   return (
     <section ref={el} className="sheet" aria-hidden="true">
-      <header>
-        <h1>{title}</h1>
-        <p>{note}</p>
-      </header>
-      <div className="sheet-grid">
-        {photos.map((p) => (
-          <figure key={p.id}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <div>{p.url ? <img src={p.url} alt="" loading="eager" /> : null}</div>
-            <figcaption><b>{p.number}</b> {p.name}{p.rating ? <span> {"★".repeat(p.rating)}</span> : null}</figcaption>
-          </figure>
-        ))}
-      </div>
+      {/* A table only so its head and foot repeat on every page. They are empty strips that hold the top and
+          bottom margins, so the sheet keeps its white border even when the print box is set to no margins. */}
+      <table>
+        <thead><tr><td><div className="sheet-gap" /></td></tr></thead>
+        <tfoot><tr><td><div className="sheet-gap" /></td></tr></tfoot>
+        <tbody>
+          <tr>
+            <td>
+              <header>
+                <h1>{title}</h1>
+                <p>{note}</p>
+              </header>
+              <div className="sheet-grid">
+                {photos.map((p) => (
+                  <figure key={p.id}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <div>{p.url ? <img src={p.url} alt="" loading="eager" /> : null}</div>
+                    <figcaption><b>{p.number}</b> {p.name}{p.rating ? <span> {"★".repeat(p.rating)}</span> : null}</figcaption>
+                  </figure>
+                ))}
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </section>
   );
 }
