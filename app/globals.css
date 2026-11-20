@@ -111,6 +111,17 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
 .ptile.drop-after { box-shadow: 8px 0 0 -4px var(--ink); }
 .ptile.chosen { outline: 3px solid var(--ink); outline-offset: 2px; }
 .pill-btn.small { min-height: 32px; padding: 0 12px; margin-left: 12px; font: 500 13px var(--sans); vertical-align: middle; }
+/* Upload bar: a quiet card under the header while a batch goes up. */
+.upload { position: absolute; top: 84px; left: 50%; transform: translateX(-50%); z-index: 25; width: min(520px, calc(100vw - 56px)); padding: 16px; border-radius: 20px; background: var(--control); display: flex; flex-direction: column; gap: 10px; }
+.upload-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+.upload-top strong { font-weight: 500; }
+.upload-top .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-top .meta { flex: none; }
+.upload-top .meta.name { flex: 1; }
+.upload-track { height: 6px; border-radius: 999px; background: var(--ground); overflow: hidden; }
+.upload-track div { height: 100%; border-radius: 999px; background: var(--ink); transition: width 0.25s linear; }
+.upload .pill-btn { align-self: flex-end; background: var(--ground); }
+
 /* Large view: one photograph on the plain white ground, controls kept to the edges. */
 .lightbox { position: absolute; inset: 0; z-index: 20; background: var(--ground); }
 .lightbox.with-info { right: min(420px, 100vw); }
@@ -261,6 +272,7 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   .phone-only { display: inline-flex !important; }
   .save.always { display: block; }
   .ptile { height: 120px; }
+  .upload { top: 128px; width: calc(100vw - 32px); }
   .lb-stage { inset: 116px 8px 72px; }
   .lb-stage.zoomed { inset: 116px 0 72px; }
   .lb-zoom { display: none; } /* the phone zooms with two fingers */

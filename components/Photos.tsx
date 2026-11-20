@@ -12,6 +12,7 @@ import { PinMap, PlaceInput } from "./PlaceMap";
 import { PhotoMap } from "./PhotoMap";
 import { BigView } from "./BigView";
 import { ContactSheet } from "./ContactSheet";
+import { UploadBar, type Upload } from "./UploadBar";
 
 const NAME = process.env.NEXT_PUBLIC_APP_NAME || "Stash";
 const ROOT = "Stash Photos";
@@ -77,7 +78,8 @@ export function Photos() {
   const [place, setPlace] = useState("");
   const [placeAt, setPlaceAt] = useState<{ lat: number; lng: number } | null>(null);
   const [connected, setConnected] = useState(false);
-  const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
+  const [busy, setBusy] = useState<Upload | null>(null);
+  const halt = useRef(false); // set by Stop: finish the photo in hand, then end the batch
   const [toast, setToast] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   // Select mode: tap photos to pick several, then set a detail on all of them at once.
@@ -156,11 +158,17 @@ export function Photos() {
     if (!uid) return;
     const where = place.trim().slice(0, 80) || null;
     let done = 0, skipped = 0, failed = 0;
-    setBusy({ done, total: picked.length });
+    // The bar measures the whole batch in bytes, so one large file does not look like a stall.
+    const size = picked.reduce((n, f) => n + f.size, 0), started = Date.now();
+    let before = 0;
+    halt.current = false;
+    setBusy({ done, total: picked.length, name: picked[0].name, sent: 0, size, secs: 0, stopping: false });
     setAdding(false);
     let held = 0;
     for (let i = 0; i < picked.length; i++) {
       const f = picked[i];
+      if (halt.current) { say(`Stopped. ${picked.length - i} ${picked.length - i === 1 ? "photo was" : "photos were"} not uploaded.`); break; }
+      setBusy((u) => u && { ...u, name: f.name });
       // Renew a pass that is about to run out. If that needs a click, pause here and keep what is left.
       if (driveMinutesLeft() < 3 && !(await connectDrive(true))) { held = picked.length - i; setWaiting(picked.slice(i)); setConnected(false); break; }
       try {
@@ -172,7 +180,8 @@ export function Photos() {
         const named = where || (info.lat !== null && info.lng !== null ? await nameOf(info.lat, info.lng) : null);
         const d = info.takenAt ? new Date(info.takenAt) : new Date();
         const folder = [ROOT, String(d.getFullYear()), `${d.getFullYear()}-${pad(d.getMonth() + 1)}`];
-        const drive = await uploadToDrive(f, await ensureFolder(folder));
+        const base = before;
+        const drive = await uploadToDrive(f, await ensureFolder(folder), (sent) => { const secs = (Date.now() - started) / 1000; setBusy((u) => u && { ...u, sent: base + sent, secs }); });
         const id = crypto.randomUUID();
         let thumb: string | null = null;
         if (info.thumb) {
@@ -200,7 +209,9 @@ export function Photos() {
         failed++;
       } finally {
         done++;
-        setBusy({ done, total: picked.length });
+        before += f.size;
+        const sent = before;
+        setBusy((u) => u && { ...u, done, sent });
       }
     }
     setBusy(null);
@@ -581,6 +592,8 @@ export function Photos() {
           onStep={step} onClose={closeBig} onInfo={toggleInfo} onRate={rate} onLoad={() => loadOriginal(opened)}
           archived={opened.archived} onArchive={() => setArchived([opened.id], !opened.archived)} />
       )}
+
+      {busy && <UploadBar u={busy} onStop={() => { halt.current = true; setBusy((u) => u && { ...u, stopping: true }); }} />}
 
       {waiting && !busy && (
         <section className="answer" aria-live="polite">

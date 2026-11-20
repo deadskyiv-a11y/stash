@@ -99,15 +99,29 @@ export async function ensureFolder(path: string[]): Promise<string> {
 }
 
 /** Sends the original file to a Drive folder. The file goes from this browser to Google and nowhere else. */
-export async function uploadToDrive(file: File, folderId: string): Promise<{ id: string; link: string }> {
+export function uploadToDrive(file: File, folderId: string, onProgress?: (sent: number) => void): Promise<{ id: string; link: string }> {
+  if (!driveConnected()) return Promise.reject(new Error("Google Drive is not connected."));
   const b = "stash" + crypto.randomUUID();
   const head = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify({ name: file.name, parents: [folderId] })}\r\n--${b}\r\nContent-Type: ${file.type || "application/octet-stream"}\r\n\r\n`;
-  const made = await api("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink", {
-    method: "POST",
-    headers: { "Content-Type": `multipart/related; boundary=${b}` },
-    body: new Blob([head, file, `\r\n--${b}--`]),
+  // An older-style request, because it is the only kind that reports how much has been sent so far.
+  return new Promise((done, fail) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink");
+    x.setRequestHeader("Authorization", `Bearer ${token!.value}`);
+    x.setRequestHeader("Content-Type", `multipart/related; boundary=${b}`);
+    x.upload.onprogress = (e) => onProgress?.(Math.min(file.size, e.loaded));
+    x.onerror = () => fail(new Error("The upload was cut off. Check the connection."));
+    x.onload = () => {
+      if (x.status === 401) { token = null; try { sessionStorage.removeItem(KEY); } catch { /* ignore */ } return fail(new Error("Google Drive needs connecting again.")); }
+      if (x.status < 200 || x.status >= 300) return fail(new Error(`Google Drive answered with ${x.status}.`));
+      try {
+        const made = JSON.parse(x.responseText) as { id: string; webViewLink?: string };
+        onProgress?.(file.size);
+        done({ id: made.id, link: made.webViewLink || `https://drive.google.com/file/d/${made.id}/view` });
+      } catch { fail(new Error("Google Drive gave an answer Stash could not read.")); }
+    };
+    x.send(new Blob([head, file, `\r\n--${b}--`]));
   });
-  return { id: made.id as string, link: (made.webViewLink as string) || `https://drive.google.com/file/d/${made.id}/view` };
 }
 
 /** Fetches the full original from Drive, for looking at a photograph at its real size. */

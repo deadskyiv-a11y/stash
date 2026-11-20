@@ -236,6 +236,12 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   which then moves to the next photo), or for a selection. The original in Drive is untouched
   and the photo keeps its projects, rating and details. Untried. Photo room only; Stash's saves
   have no archive.
+- **Upload bar** (`components/UploadBar.tsx`). While a batch uploads, a card under the header
+  shows "Uploading 12 of 50", a bar measured in bytes across the whole batch, the current file
+  name, megabytes sent, a time-left estimate after the first few seconds, and a Stop button
+  that ends the batch after the photo in hand. The Drive upload uses `XMLHttpRequest`, the only
+  request type that reports upload progress. The bar's look is checked on this Mac; a real
+  batch has not been watched.
 - **Drive pass renewal.** A batch starts on a fresh pass, and one about to run out is renewed
   mid-batch. Google renews through a pop-up window, which the browser may block when no click
   led to it. The batch then pauses and a card offers "Connect and carry on" with the photos
