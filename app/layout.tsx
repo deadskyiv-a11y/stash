@@ -7,6 +7,8 @@ export const metadata: Metadata = {
   title: name,
   description: "A private place to save anything and find it again.",
   robots: { index: false, follow: false },
+  // On an iPhone home screen: open full-screen, with a plain status bar over the white header.
+  appleWebApp: { capable: true, title: name, statusBarStyle: "default" },
 };
 
 export const viewport: Viewport = { themeColor: "#ffffff", width: "device-width", initialScale: 1 };

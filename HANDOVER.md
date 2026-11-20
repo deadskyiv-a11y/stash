@@ -170,6 +170,11 @@ in the repository, never echo it, never commit it.
   Archive. Large view: swipe between photos, native pinch to zoom, Archive, Details, Close.
   Gone on the phone: Select and bulk edit, Order, Contact sheet, Export, Map, grouping by
   place or subject, Load the original.
+- **Home screen app.** `app/manifest.ts`, `app/apple-icon.png` and `public/icon-*.png` let Kofi add
+  Stash to his iPhone home screen and open it full-screen. A home-screen app keeps its own
+  sign-in, separate from Safari, so he signs in once inside it with the emailed code. The share
+  Shortcut still opens Safari, which is signed in separately. Whether Google's Drive sign-in
+  window works inside the home-screen app is unknown.
 - This matches the spec's "no canvas on the phone". The earlier phone canvas is gone.
 - Checked on a phone-sized screen on this Mac with sample content. Not yet seen on his phone.
 
