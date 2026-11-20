@@ -76,6 +76,7 @@ export function Photos() {
   const queued = useRef(new Set<string>());
   const [open, setOpen] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [menu, setMenu] = useState(false);
   const [place, setPlace] = useState("");
   const [placeAt, setPlaceAt] = useState<{ lat: number; lng: number } | null>(null);
   const [connected, setConnected] = useState(false);
@@ -97,7 +98,7 @@ export function Photos() {
   const signed = useRef(new Set<string>());
   const router = useRouter();
 
-  const say = useCallback((m: string) => { setToast(m); window.setTimeout(() => setToast(""), 5000); }, []);
+  const say = useCallback((m: string) => { setToast(m); window.setTimeout(() => setToast(""), 4000); }, []);
 
   useEffect(() => {
     queueMicrotask(() => setConnected(driveConnected()));
@@ -250,7 +251,7 @@ export function Photos() {
     const over = (e: DragEvent) => e.preventDefault();
     const drop = (e: DragEvent) => { e.preventDefault(); const files = [...(e.dataTransfer?.files || [])]; if (files.length) deposit(files); };
     const key = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { setOpen(null); setAdding(false); }
+      if (e.key === "Escape") { setOpen(null); setAdding(false); setMenu(false); setSpot(null); setSelecting(false); setChosen(new Set()); }
       // Option+P switches between Stash and the photo room.
       if (e.altKey && e.code === "KeyP") { e.preventDefault(); router.push("/"); }
     };
@@ -545,9 +546,8 @@ export function Photos() {
             <div className="pgrid">
               {list.map((p) => {
                 const url = p.thumb_path ? urls[p.thumb_path] : undefined;
-                const w = p.w && p.h ? Math.round((180 * p.w) / p.h) : 180;
                 return (
-                  <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "") + (ordering && !selecting ? " movable" : "") + (over?.id === p.id && dragging !== p.id ? (over.after ? " drop-after" : " drop-here") : "") + (dragging === p.id ? " lifting" : "")} style={{ width: w }}
+                  <button key={p.id} type="button" className={"ptile" + (chosen.has(p.id) ? " chosen" : "") + (ordering && !selecting ? " movable" : "") + (over?.id === p.id && dragging !== p.id ? (over.after ? " drop-after" : " drop-here") : "") + (dragging === p.id ? " lifting" : "")} style={{ aspectRatio: p.w && p.h ? `${p.w} / ${p.h}` : "1" }}
                     data-pid={p.id} draggable={false}
                     onPointerDown={(e) => { if (ordering && !selecting && e.pointerType !== "touch" && e.button === 0) startMove(p.id, e.clientX, e.clientY); }} aria-label={p.name} aria-pressed={selecting ? chosen.has(p.id) : undefined}
                     onClick={(e) => { if (dragged.current) { dragged.current = false; return; } if (selecting) pick(p.id, e.shiftKey); else { setConfirmDelete(false); setInfo(false); setOpen(p.id); setBig(true); } }}>
@@ -572,9 +572,12 @@ export function Photos() {
 
       <header className="top">
         <div className="brand">
-          <Link className="plain" href="/" aria-label={"Back to " + NAME}><Logo height={24} title={NAME} /></Link>
-          <Link className="pill-btn link" href="/">Stash</Link>
-          <span className="pill-btn link on">Photos</span>
+          {/* The same header as the Stash room: the logo opens the menu, and the two room names sit beside it. */}
+          <button type="button" className="plain" onClick={() => setMenu((m) => !m)} aria-expanded={menu} aria-label={NAME + " menu"}><Logo height={24} title={NAME} /></button>
+          <Link className="pill-btn link desk" href="/">Stash</Link>
+          <span className="pill-btn link on desk" aria-current="page">Photos</span>
+          {menu && <Link className="pill-btn link phone-only" href="/">Stash</Link>}
+          {menu && <button type="button" className="pill-btn" onClick={() => supabase().auth.signOut()}>Sign out</button>}
         </div>
         <div className="command">
           <svg aria-hidden="true" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><circle cx="11" cy="11" r="7" /><path d="M20 20l-3.5-3.5" /></svg>
@@ -609,7 +612,7 @@ export function Photos() {
         </div>
       )}
 
-      <footer className="bottom">
+      <footer className={"bottom" + (selecting || spot || (opened && !big) ? " with-panel" : "")}>
         <div className="bar">
           <button type="button" className={view === "grid" ? "on" : ""} onClick={() => { setView("grid"); setSpot(null); }}>Grid</button>
           <button type="button" className={view === "map" ? "on" : ""} onClick={() => { stopSelecting(); setView("map"); }}>Map</button>
@@ -730,7 +733,7 @@ export function Photos() {
             <dl><Field key={opened.id + "pj" + round} label="Add to" value="" list="project-names" placeholder="A project name" onSave={(v) => setProject([opened.id], v, true)} /></dl>
           </div>
           {opened.tags.length > 0 && <div className="tags">{opened.tags.map((t) => <button key={t} type="button" className="pill-btn" onClick={() => { setQ(t); setOpen(null); }}>{t}</button>)}</div>}
-          {opened.keywords.length > 0 && <div className="tags">{opened.keywords.map((k) => <span key={k} className="pill-btn link">{k}</span>)}</div>}
+          {opened.keywords.length > 0 && <div className="tags">{opened.keywords.map((k) => <button key={k} type="button" className="pill-btn" onClick={() => { setQ(k); setBig(false); setInfo(false); setOpen(null); }}>{k}</button>)}</div>}
           {ordering && opened.projects.includes(only) && (
             <div className="tags">
               <button type="button" className="pill-btn" onClick={() => nudge(opened.id, -1)}>Move earlier</button>

@@ -66,7 +66,7 @@ export function PinMap({ lat, lng, onPick }: { lat: number | null; lng: number |
 
   return (
     <div className="pinmap">
-      <div ref={box} className="pinmap-view" role="button" aria-label="Map. Click to place the pin." tabIndex={0}
+      <div ref={box} className="pinmap-view" title="Click to place the pin"
         onClick={(e) => {
           const r = box.current!.getBoundingClientRect();
           const p = fromTile(c.x + (e.clientX - r.left - r.width / 2) / TILE, c.y + (e.clientY - r.top - r.height / 2) / TILE, z);

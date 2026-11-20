@@ -321,12 +321,21 @@ way in for anyone but the owner, no secret in the code or its history. What was 
   thumbnails. A second batch cannot start over a running one. AI reading stops when the room is
   left. A missing large preview is requested once.
 
+**Design fixes, same day.** Phone: the large view's buttons wrap so Close is reachable, the photo
+grid's heading clears the search box, grid pictures keep their shape (`aspect-ratio`, no fixed
+width), the selection tray leaves room to scroll, and an empty zoom pill on the map is gone.
+Everywhere: ink and grey buttons are one size (44px, 48px in the header), stars and small
+buttons meet the 44px rule, unlit stars are a visible grey, disabled buttons are dimmed by one
+rule, boxes that drop the browser outline get the inset focus ring, error text and the map
+credit link are no longer coloured, the map note sits under panels, the answer card sits over
+them, and the bottom bar stops where an open side panel begins. Both rooms now share one header:
+the logo opens a menu with Sign out, with Stash and Photos pills beside it. Checked on a
+phone-sized screen on this Mac with mock content; not seen on Kofi's phone.
+
 **Not yet fixed, from the same review:**
-- Design: on the phone, the large view's Close button may sit off screen, the photo grid's first
-  heading sits behind the search box, and the grid crops pictures. Rating stars and some buttons
-  are under 44px, unlit stars are too pale, ink and grey buttons differ in size, disabled buttons
-  look enabled, a map note floats over panels, sign-in error text is red and the map credit link
-  is blue. The two rooms' headers differ and the photo room has no Sign out.
+- Design: canvas tiles cannot be opened by keyboard (the list view can); place suggestions have
+  no arrow-key support; bottom-bar toggles show state by colour only; some repeated numbers in
+  the stylesheet (header offsets, panel width) could become variables.
 - Bugs: signed picture addresses are never renewed (a tab left open overnight shows blanks);
   export fails whole on one missing original and does not name it; a stale search reply can
   replace a newer one; a Drive sign-in window left open hangs a batch; no Content-Security-Policy.

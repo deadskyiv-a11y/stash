@@ -517,6 +517,7 @@ function Library() {
       <header className="top">
         <div className="brand">
           <button type="button" className="plain" onClick={() => setMenu((m) => !m)} aria-expanded={menu} aria-label={NAME + " menu"}><Logo height={24} title={NAME} /></button>
+          <span className="pill-btn link on desk" aria-current="page">Stash</span>
           <Link className="pill-btn link desk" href="/photos">Photos</Link>
           {menu && <Link className="pill-btn link phone-only" href="/photos">Photos</Link>}
           {menu && <button type="button" className="pill-btn" onClick={() => supabase().auth.signOut()}>Sign out</button>}
@@ -574,7 +575,7 @@ function Library() {
         </form>
       )}
 
-      <footer className="bottom">
+      <footer className={"bottom" + (opened ? " with-panel" : "")}>
         <div className="bar">
           <button type="button" className={view === "canvas" ? "on" : ""} onClick={() => setView("canvas")}>Canvas</button>
           <button type="button" className={view === "list" ? "on" : ""} onClick={() => setView("list")}>List</button>
