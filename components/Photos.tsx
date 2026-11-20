@@ -4,7 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { api, supabase } from "@/lib/supabase-browser";
-import { connectDrive, downloadFromDrive, driveConfigured, driveConnected, driveMinutesLeft, ensureFolder, uploadToDrive } from "@/lib/drive";
+import { connectDrive, downloadFromDrive, driveConfigured, driveConnected, driveMinutesLeft, ensureFolder, streamFromDrive, uploadToDrive } from "@/lib/drive";
+import { chooseZipPlace, uniqueNames, writeZip } from "@/lib/export-zip";
 import { readPhoto } from "@/lib/photo-read";
 import { nameOf } from "@/lib/places";
 import { Logo } from "./Logo";
@@ -80,6 +81,7 @@ export function Photos() {
   const [connected, setConnected] = useState(false);
   const [busy, setBusy] = useState<Upload | null>(null);
   const halt = useRef(false); // set by Stop: finish the photo in hand, then end the batch
+  const exporting = useRef<AbortController | null>(null);
   const [toast, setToast] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   // Select mode: tap photos to pick several, then set a detail on all of them at once.
@@ -452,6 +454,41 @@ export function Photos() {
     say(`${archived ? "Archived" : "Restored"} ${ids.length} ${ids.length === 1 ? "photo" : "photos"}.`);
   };
 
+  // Export: the originals of the given photos, fetched from Drive and put into one zip file.
+  const exportPhotos = async (ids: string[], label: string, numbered: boolean) => {
+    const list = ids.map((id) => photos.find((p) => p.id === id)).filter((p): p is Photo => !!p && !!p.drive_id);
+    if (list.length === 0) { say("There are no originals to export."); return; }
+    // Google's window and the save box each need their own click, so a stale Drive pass is renewed first and Export pressed again.
+    if (driveMinutesLeft() < 20) {
+      const ok = await connectDrive(true);
+      setConnected(ok);
+      say(ok ? "Google Drive is connected. Press Export again." : "Connect Google Drive first, under Add photos.");
+      return;
+    }
+    const today = new Date();
+    const file = `${label} ${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}.zip`;
+    let place: Awaited<ReturnType<typeof chooseZipPlace>> = null;
+    try { place = await chooseZipPlace(file); } catch { return; } // he closed the save box
+    const names = uniqueNames(list.map((p, i) => (numbered ? `${String(i + 1).padStart(3, "0")} ${p.name}` : p.name)));
+    const size = list.reduce((n, p) => n + (p.bytes || 0), 0), started = Date.now();
+    const ctl = new AbortController();
+    exporting.current = ctl;
+    setBusy({ done: 0, total: list.length, name: list[0].name, sent: 0, size, secs: 0, stopping: false, verb: "Exporting" });
+    try {
+      await writeZip(
+        list.map((p, i) => ({ name: names[i], modified: dateOf(p), open: () => streamFromDrive(p.drive_id!, ctl.signal) })),
+        file, place, ctl.signal,
+        (i) => setBusy((u) => u && { ...u, done: i, name: list[i].name }),
+        (sent) => { const secs = (Date.now() - started) / 1000; setBusy((u) => u && { ...u, sent, secs }); },
+      );
+      say(`Exported ${list.length} ${list.length === 1 ? "original" : "originals"} to ${file}.`);
+    } catch (e) {
+      say(ctl.signal.aborted ? "Export stopped. The zip was not finished." : e instanceof Error ? e.message + " The zip was not finished." : "The export failed.");
+    }
+    exporting.current = null;
+    setBusy(null);
+  };
+
   const toggleInfo = useCallback(() => setInfo((x) => !x), []);
   const rate = (n: number | null) => { if (opened) edit(opened, { rating: n }); };
   const day = (iso: string | null) => { if (!iso) return ""; const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
@@ -577,6 +614,7 @@ export function Photos() {
         </div>
         <div className="bar" style={{ display: view === "map" ? "none" : undefined }}>
           <button type="button" disabled={showing === 0 || sheet} onClick={() => setSheet(true)}>Contact sheet</button>
+          <button type="button" disabled={showing === 0 || !!busy} onClick={() => exportPhotos(sequence, only || (inArchive ? "Archive" : "Stash Photos"), ordering)}>Export</button>
         </div>
         <div className="bar" style={{ display: view === "map" ? "none" : undefined }}>
           <button type="button" className={selecting ? "on" : ""} onClick={() => { if (selecting) stopSelecting(); else { setOpen(null); setSelecting(true); } }}>{selecting ? "Done selecting" : "Select"}</button>
@@ -593,7 +631,11 @@ export function Photos() {
           archived={opened.archived} onArchive={() => setArchived([opened.id], !opened.archived)} />
       )}
 
-      {busy && <UploadBar u={busy} onStop={() => { halt.current = true; setBusy((u) => u && { ...u, stopping: true }); }} />}
+      {busy && <UploadBar u={busy} onStop={() => {
+        if (exporting.current) { exporting.current.abort(); return; }
+        halt.current = true;
+        setBusy((u) => u && { ...u, stopping: true });
+      }} />}
 
       {waiting && !busy && (
         <section className="answer" aria-live="polite">
@@ -700,6 +742,7 @@ export function Photos() {
                 <Field key={"mp" + round} label="Add to project" value="" list="project-names" placeholder="A project name" onSave={(v) => setProject([...chosen], v, true)} />
                 <Field key={"mq" + round} label="Take out of" value="" list="project-names" placeholder="A project name" onSave={(v) => setProject([...chosen], v, false)} />
               </dl>
+              <button type="button" className="pill-btn" disabled={!!busy} onClick={() => exportPhotos(sequence.filter((id) => chosen.has(id)), only || "Stash Photos selection", false)}>Export these originals</button>
               <button type="button" className="pill-btn" onClick={() => setArchived([...chosen], !inArchive)}>{inArchive ? "Restore these" : "Archive these"}</button>
               <button type="button" className="pill-btn" onClick={() => setChosen(new Set())}>Clear selection</button>
             </>

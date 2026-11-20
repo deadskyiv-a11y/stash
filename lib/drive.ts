@@ -132,3 +132,13 @@ export async function downloadFromDrive(id: string): Promise<Blob> {
   if (!res.ok) throw new Error(`Google Drive answered with ${res.status}.`);
   return res.blob();
 }
+
+/** Opens the full original in Drive as a stream, so it can flow into a zip without being held in memory. */
+export async function streamFromDrive(id: string, signal?: AbortSignal): Promise<ReadableStream<Uint8Array>> {
+  if (!driveConnected()) throw new Error("Google Drive needs connecting again.");
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media`, { headers: { Authorization: `Bearer ${token!.value}` }, signal });
+  if (res.status === 401) { token = null; throw new Error("Google Drive needs connecting again."); }
+  if (res.status === 404) throw new Error("An original is no longer in Drive.");
+  if (!res.ok || !res.body) throw new Error(`Google Drive answered with ${res.status}.`);
+  return res.body;
+}

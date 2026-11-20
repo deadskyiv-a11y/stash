@@ -1,6 +1,6 @@
 "use client";
 
-export type Upload = { done: number; total: number; name: string; sent: number; size: number; secs: number; stopping: boolean };
+export type Upload = { done: number; total: number; name: string; sent: number; size: number; secs: number; stopping: boolean; verb?: string };
 
 const mb = (n: number) => (n / 1048576 >= 100 ? Math.round(n / 1048576) : (n / 1048576).toFixed(1)) + " MB";
 
@@ -14,7 +14,7 @@ export function UploadBar({ u, onStop }: { u: Upload; onStop: () => void }) {
   return (
     <section className="upload" role="status" aria-live="polite">
       <div className="upload-top">
-        <strong>{u.stopping ? "Stopping after this photo" : `Uploading ${Math.min(u.done + 1, u.total)} of ${u.total}`}</strong>
+        <strong>{u.stopping ? "Stopping after this photo" : `${u.verb || "Uploading"} ${Math.min(u.done + 1, u.total)} of ${u.total}`}</strong>
         <span className="meta">{Math.round(part * 100)}%</span>
       </div>
       <div className="upload-track" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(part * 100)}>

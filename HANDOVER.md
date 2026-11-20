@@ -236,6 +236,14 @@ no Stash saves, and Stash shows no photos. Switch with the Photos pill by the lo
   which then moves to the next photo), or for a selection. The original in Drive is untouched
   and the photo keeps its projects, rating and details. Untried. Photo room only; Stash's saves
   have no archive.
+- **Export.** "Export" in the bottom bar zips the originals of whatever is showing; "Export
+  these originals" in the Select panel zips a selection. Each original is streamed from Drive
+  straight into the zip (`client-zip`, `lib/export-zip.ts`, `streamFromDrive` in
+  `lib/drive.ts`), so nothing large is held in memory. In Arc and Chrome the browser's save box
+  picks the destination and the zip is written to disk as it goes. Browsers without that box
+  (Safari, Firefox) build the zip in memory first, which limits its size. From Order mode the
+  files are numbered `001 name.jpg` in sequence. The same bar shows progress, and Stop abandons
+  the zip. The zip writing is tested on this Mac with dummy files. Fetching from Drive is not.
 - **Upload bar** (`components/UploadBar.tsx`). While a batch uploads, a card under the header
   shows "Uploading 12 of 50", a bar measured in bytes across the whole batch, the current file
   name, megabytes sent, a time-left estimate after the first few seconds, and a Stop button
