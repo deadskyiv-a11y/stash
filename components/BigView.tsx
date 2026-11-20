@@ -16,6 +16,7 @@ export function BigView({ name, src, note, place, rating, info, canLoad, fetchin
   const [fitW, setFitW] = useState(0); // the picture's width on screen at zoom 1
   const stage = useRef<HTMLDivElement>(null);
   const pan = useRef<{ x: number; y: number; l: number; t: number; moved: boolean } | null>(null);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
 
   // Zooms while keeping the point under the cursor (or the middle of the screen) where it is.
   const zoomTo = useCallback((next: number, cx?: number, cy?: number) => {
@@ -69,6 +70,15 @@ export function BigView({ name, src, note, place, rating, info, canLoad, fetchin
   return (
     <div className={"lightbox" + (info ? " with-info" : "")} role="dialog" aria-label={name}>
       <div ref={stage} className={"lb-stage" + (zoom > 1 ? " zoomed" : "")}
+        // On a touch screen, a sideways swipe with one finger moves to the next or previous photo.
+        onTouchStart={(e) => { swipe.current = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null; }}
+        onTouchEnd={(e) => {
+          const s = swipe.current, t = e.changedTouches[0];
+          swipe.current = null;
+          if (!s || !t || zoom > 1) return;
+          const dx = t.clientX - s.x, dy = t.clientY - s.y;
+          if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) { pan.current = { x: 0, y: 0, l: 0, t: 0, moved: true }; onStep(dx < 0 ? 1 : -1); }
+        }}
         onPointerDown={(e) => {
           if (zoom <= 1 || e.pointerType !== "mouse") return;
           const st = e.currentTarget;
@@ -87,6 +97,8 @@ export function BigView({ name, src, note, place, rating, info, canLoad, fetchin
           // A click zooms in on that spot, or back out to the whole picture. The end of a drag is not a click.
           const dragged = pan.current?.moved;
           pan.current = null;
+          // A finger zooms by pinching. A tap must not zoom, or every swipe to the next photo would end zoomed in.
+          if ((e.nativeEvent as PointerEvent).pointerType === "touch") return;
           if (!dragged) zoomTo(zoom > 1 ? 1 : 2.5, e.clientX, e.clientY);
         }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}

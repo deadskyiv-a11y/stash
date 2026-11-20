@@ -157,12 +157,21 @@ in the repository, never echo it, never commit it.
 - Email with a 6-digit code typed into the app, or the link opened once. The code is the
   reliable route: a link works only once, in whichever window opens it first.
 
-**Phone**
-- Two-row header, one sliding row of controls at the bottom, one-finger pan, two-finger pinch.
-- Paste and New note buttons replace Save in the header. Paste reads the clipboard (a picture
-  if there is one, else text). New note opens the same box Save opens on the laptop. Untried.
-- The spec says "No canvas on the phone". The canvas was built for the phone anyway and Kofi
-  said the zoom works fine, so it stays unless he says otherwise.
+**Phone** (rebuilt 20 November 2026; Kofi asked for a layout made for a phone, even with fewer features)
+- `usePhone` (`lib/use-phone.ts`, screens up to 640px) switches both rooms to a phone layout.
+  All phone styling is one block in `globals.css`, headed "Phone".
+- One white header holds everything pressable: logo (menu), one or two buttons, the search box,
+  and one sliding row of chips. No bottom bar, no canvas, no side panels. A panel fills the
+  screen with a sticky Back button.
+- **Stash:** `components/Feed.tsx`, saves in two columns, newest first. Chips are the groups,
+  biggest first. Paste and New note in the header. Gone on the phone: canvas, zoom, Canvas and
+  List switch, type filters, Tidy.
+- **Photos:** three-column square grid by month. Chips are All, each project, "4★ and up" and
+  Archive. Large view: swipe between photos, native pinch to zoom, Archive, Details, Close.
+  Gone on the phone: Select and bulk edit, Order, Contact sheet, Export, Map, grouping by
+  place or subject, Load the original.
+- This matches the spec's "no canvas on the phone". The earlier phone canvas is gone.
+- Checked on a phone-sized screen on this Mac with sample content. Not yet seen on his phone.
 
 ## 4b. The photo room (started 19 November 2026)
 

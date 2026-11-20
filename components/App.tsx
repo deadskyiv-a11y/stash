@@ -9,6 +9,8 @@ import { clusterOf, computeLayout, isQuote, samePage, type Label } from "@/lib/l
 import { Canvas, type CanvasHandle } from "./Canvas";
 import { Logo } from "./Logo";
 import { Photos } from "./Photos";
+import { Feed } from "./Feed";
+import { usePhone } from "@/lib/use-phone";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 
@@ -104,6 +106,7 @@ export default function App({ room = "stash" }: { room?: "stash" | "photos" }) {
 
 function Library() {
   const router = useRouter();
+  const phone = usePhone();
   const [saves, setSaves] = useState<Save[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState("");
@@ -469,11 +472,19 @@ function Library() {
   const reset = () => { setQ(""); setType("all"); setRecent(false); setPick(null); canvas.current?.refit(); };
   const filtering = hits !== null;
   const status = !loaded ? "" : !filtering ? `${saves.length} ${saves.length === 1 ? "save" : "saves"}` : hits!.size === 0 ? "No match" : `${hits!.size} of ${saves.length}`;
+  // The phone browses by group with a row of names, where the laptop has the canvas. Biggest groups first.
+  const groupNames = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const s of saves) if (s.status !== "processing") n.set(clusterOf(s), (n.get(clusterOf(s)) || 0) + 1);
+    return [...n.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
+  }, [saves]);
   const types: [TypeFilter, string][] = [["all", "Everything"], ["image", "Images"], ["link", "Links"], ["note", "Notes"]];
 
   return (
     <main className="app">
-      {view === "canvas" ? (
+      {phone ? (
+        <Feed saves={shown} urls={urls} onOpen={(id) => { setConfirmDelete(false); setOpen(id); }} />
+      ) : view === "canvas" ? (
         <Canvas ref={canvas} saves={saves} layout={layout} hits={hits} urls={urls} focusKey={focusKey}
           onOpen={(id) => { setConfirmDelete(false); setOpen(id); }}
           onPick={(l: Label) => { setQ(""); setPick((p) => (p && p.cluster === l.cluster && p.sub === l.sub ? null : { cluster: l.cluster, sub: l.sub })); }}
@@ -538,6 +549,14 @@ function Library() {
         <button type="button" className="pill-btn phone" onClick={pasteClip}>Paste</button>
         <button type="button" className="ink phone" onClick={() => setAdding((a) => !a)}>New note</button>
         <button type="button" className="ink save" onClick={() => setAdding((a) => !a)}>Save</button>
+        {phone && (
+          <nav className="chips" aria-label="Groups">
+            <button type="button" className={pick === null ? "on" : ""} onClick={() => setPick(null)}>All</button>
+            {groupNames.map((g) => (
+              <button key={g} type="button" className={pick?.cluster === g ? "on" : ""} onClick={() => { setQ(""); setPick(pick?.cluster === g ? null : { cluster: g, sub: null }); }}>{g}</button>
+            ))}
+          </nav>
+        )}
       </header>
 
       {reply && (
@@ -597,7 +616,7 @@ function Library() {
 
       {opened && (
         <aside className="detail" aria-label="Save details">
-          <button type="button" className="pill-btn close" onClick={() => setOpen(null)}>Close</button>
+          <button type="button" className="pill-btn close" onClick={() => setOpen(null)}>{phone ? "Back" : "Close"}</button>
           {opened.image_path && urls[opened.image_path] && (
             // eslint-disable-next-line @next/next/no-img-element
             <img className={opened.is_pale ? "pale" : ""} src={urls[opened.image_path]} alt={opened.title || ""} />

@@ -219,7 +219,7 @@ button.label::after { content: ""; position: absolute; inset: calc(-12px * var(-
 .row-path, .row-kind, .row-when { font-size: 13px; color: var(--grey); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .row-kind { flex: none; width: 60px; }
 .row-when { flex: none; width: 120px; text-align: right; }
-@media (max-width: 640px) { .row-kind { display: none; } .row-when { width: auto; } .bottom { justify-content: center; } }
+@media (max-width: 640px) { .row-kind { display: none; } .row-when { width: auto; } }
 
 /* Opened save */
 .detail { position: absolute; top: 0; right: 0; bottom: 0; width: min(420px, 100vw); background: var(--ground); border-left: 1px solid var(--line); padding: 24px 24px 40px; overflow-y: auto; display: flex; flex-direction: column; align-items: flex-start; gap: 14px; z-index: 5; }
@@ -268,50 +268,74 @@ button.label::after { content: ""; position: absolute; inset: calc(-12px * var(-
 
 .toast { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); padding: 12px 18px; border-radius: 999px; background: var(--ink); color: #fff; font-size: 14px; max-width: calc(100vw - 56px); z-index: 30; }
 
-/* Phone */
+/* Phone.
+   The phone has its own layout, not the desktop one squeezed down: a white header holding everything you can
+   press (logo, one or two buttons, the search box, one sliding row of chips), then the content beneath it.
+   No bottom bar, no canvas, no side panels: a panel fills the screen. Nothing floats over anything else. */
 @media (max-width: 640px) {
-  input, textarea { font-size: 16px; } /* iOS zooms the whole page into a smaller input */
-  .top { padding: 12px 16px; gap: 10px; }
+  :root { --ptop: 186px; } /* the height of the phone header; content and cards start below it */
+  input, textarea, select { font-size: 16px; } /* iOS zooms the whole page into a smaller input */
+
+  .top { padding: 12px 16px 10px; gap: 10px; background: var(--ground); pointer-events: auto; z-index: 3; }
   .brand { min-width: 0; }
   .command { order: 3; flex: 1 1 100%; max-width: none; }
   .brand + .command { margin: 0; }
   .save { display: none; } /* the phone gets Paste and New note instead */
+  .save.always { display: block; min-width: 0; }
   .phone { display: block; }
-  .bookmarklet { display: none; }
-  .desk { display: none !important; }
+  .top .pill-btn.phone { margin-left: auto; }
+  .bookmarklet, .desk { display: none !important; }
   .phone-only { display: inline-flex !important; }
-  .save.always { display: block; }
-  .ptile { height: 120px; }
-  .upload { top: 128px; width: calc(100vw - 32px); }
-  /* Four buttons do not fit one row on a phone. Let them wrap, and start the picture below both rows. */
+  .bottom { display: none; }
+
+  /* The one sliding row: groups in Stash, filters in Photos. It runs edge to edge so a cut-off chip shows there is more. */
+  .chips { order: 4; flex: 1 1 100%; display: flex; gap: 6px; margin: 0 -16px; padding: 0 16px; overflow-x: auto; scrollbar-width: none; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips button { flex: none; min-height: 44px; padding: 0 14px; border-radius: 999px; background: var(--control); font: 500 14px var(--sans); white-space: nowrap; }
+  .chips button.on { background: var(--ink); color: #fff; }
+
+  /* Stash: saves in two columns, newest first. */
+  .feed { position: absolute; inset: 0; overflow-y: auto; padding: var(--ptop) 16px 40px; -webkit-overflow-scrolling: touch; }
+  .feed-cols { column-count: 2; column-gap: 10px; }
+  .fcard { display: block; width: 100%; margin: 0 0 10px; break-inside: avoid; text-align: left; }
+  .fcard img { display: block; width: 100%; height: auto; border-radius: 2px; background: var(--control); }
+  .fcard.pale img { outline: 1px solid var(--line); outline-offset: -1px; }
+  .fcap { display: flex; flex-direction: column; gap: 2px; padding: 6px 0 2px; font: 500 13px/1.35 var(--sans); }
+  .fcap b { font-weight: 500; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
+  .fcap span { font: 400 12px/1.4 var(--sans); color: var(--grey); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fbox { display: flex; flex-direction: column; gap: 6px; padding: 12px; border-radius: 2px; background: var(--control); font: 500 13px/1.35 var(--sans); overflow-wrap: anywhere; }
+  .fbox.note { background: var(--note); }
+  .fbox .muted { font: 400 12px/1.4 var(--sans); }
+  .fclamp { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 7; overflow: hidden; }
+
+  /* Photos: square thumbnails, three across, by month. The full picture is one tap away. */
+  .list { padding: var(--ptop) 16px 40px; }
+  .list.photos, .list.photos.with-panel { padding: var(--ptop) 16px 40px; }
+  .pgroup { margin-bottom: 28px; content-visibility: visible; }
+  .label.static { font-size: 15px; margin-bottom: 8px; }
+  .pgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+  .ptile { height: auto; width: auto; max-width: none; aspect-ratio: 1 !important; }
+
+  /* Cards start under the header. */
+  .adder { right: 16px; top: var(--ptop); width: calc(100vw - 32px); z-index: 4; }
+  .answer, .upload { top: var(--ptop); width: calc(100vw - 32px); }
+  .toast { bottom: 24px; }
+
+  /* A panel is a whole screen on a phone, above the header, with its Back button always in reach. */
+  .detail { width: 100vw; border-left: none; z-index: 8; padding: 12px 16px 40px; }
+  .detail .close { position: sticky; top: 0; align-self: flex-start; z-index: 1; background: var(--control); }
+  .detail.over { z-index: 21; }
+
+  /* Large view: three buttons in one row, the picture, then stars and arrows. */
+  .lb-top { left: 16px; right: 16px; top: 12px; flex-direction: column; align-items: flex-start; gap: 8px; }
+  .lb-top .meta { max-width: 100%; }
   .lb-actions { flex-wrap: wrap; max-width: 100%; }
-  .lb-stage { inset: 172px 8px 72px; }
-  .lb-stage.zoomed { inset: 172px 0 72px; }
+  .lb-stage, .lb-stage.zoomed { inset: 116px 0 76px; }
   .lb-zoom { display: none; } /* the phone zooms with two fingers */
-  .lb-top { left: 16px; right: 16px; top: 12px; flex-direction: column; align-items: flex-start; }
   .lb-nav { top: auto; bottom: 14px; margin-top: 0; }
   .lightbox.with-info { right: 0; }
-  .pmap-zoom { display: none; } /* the phone zooms the map with two fingers */
-  .pmap-note { left: 16px; top: 132px; max-width: calc(100vw - 150px); }
-  .list.photos { padding-top: 136px; }
-  /* Room below the last row, so it can be scrolled clear of the selection tray. */
-  .list.photos.with-panel { padding-right: 16px; padding-bottom: 52vh; }
-  .bottom.with-panel { right: 0; }
-  /* On the phone the selection panel is a sheet across the bottom, so the photos above stay tappable. */
-  /* Named tray, not sheet: .sheet is the print-only contact sheet and is hidden on screen. */
-  .detail.tray { top: auto; width: 100%; max-height: 46vh; border-left: none; border-top: 1px solid var(--line); padding: 16px 16px 24px; }
-  .ptile { max-width: 100%; }
-  .top .pill-btn.phone { margin-left: auto; }
-  .adder { right: 16px; top: 128px; width: calc(100vw - 32px); }
-  .answer { top: 128px; width: calc(100vw - 32px); }
-  .list { padding: 136px 16px 100px; }
-  /* One row of controls that slides sideways, instead of three stacked rows over the saves. */
-  .bottom { left: 0; right: 0; bottom: 0; padding: 0 16px calc(12px + env(safe-area-inset-bottom)); flex-wrap: nowrap; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
-  .bottom::-webkit-scrollbar { display: none; }
-  .bar { flex: none; flex-wrap: nowrap; }
-  .bar button { padding: 0 14px; white-space: nowrap; }
-  .bar .round, .zoom { display: none; } /* pinch does this on a phone */
-  .toast { bottom: 84px; }
+
+  .pmap-zoom, .pmap-note { display: none; }
 }
 
 /* Contact sheet. Nothing on screen; on paper it is the only thing there. */

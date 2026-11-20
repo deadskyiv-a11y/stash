@@ -14,6 +14,7 @@ import { PhotoMap } from "./PhotoMap";
 import { BigView } from "./BigView";
 import { ContactSheet } from "./ContactSheet";
 import { UploadBar, type Upload } from "./UploadBar";
+import { usePhone } from "@/lib/use-phone";
 
 const NAME = process.env.NEXT_PUBLIC_APP_NAME || "Stash";
 const ROOT = "Stash Photos";
@@ -262,7 +263,10 @@ export function Photos() {
   }, [deposit, router]);
 
   // Order mode only makes sense inside one project. Without a project picked it falls back to dates.
-  const ordering = group === "order" && only !== "";
+  // The phone shows one simple view: a grid by month. Grouping, ordering, selecting and the map stay on the laptop.
+  const phone = usePhone();
+  const grouping = phone ? "date" : group;
+  const ordering = grouping === "order" && only !== "";
   // A project's full sequence: the saved order first, then any photo not yet placed, oldest first.
   const sequenceOf = useCallback((project: string) => {
     const mine = photos.filter((p) => p.projects.includes(project));
@@ -287,8 +291,8 @@ export function Photos() {
         if (!words.every((w) => hay.includes(w))) continue;
       }
       // A photo in several projects shows under each of them.
-      const keys = ordering ? [only] : group === "project" ? (p.projects.length ? p.projects : ["No project"])
-        : [group === "date" || group === "order" ? month(dateOf(p)) : group === "place" ? p.place || "No place given" : p.subject || (p.tagged ? "Other" : "Not read yet")];
+      const keys = ordering ? [only] : grouping === "project" ? (p.projects.length ? p.projects : ["No project"])
+        : [grouping === "date" || grouping === "order" ? month(dateOf(p)) : grouping === "place" ? p.place || "No place given" : p.subject || (p.tagged ? "Other" : "Not read yet")];
       for (const k of keys) {
         if (!map.has(k)) map.set(k, []);
         map.get(k)!.push(p);
@@ -299,8 +303,8 @@ export function Photos() {
       return [...map.entries()].map(([k, list]) => [k, [...list].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0))] as [string, Photo[]]);
     }
     const out = [...map.entries()];
-    return group === "date" ? out : out.sort((a, b) => b[1].length - a[1].length);
-  }, [photos, group, q, stars, only, inArchive, ordering, sequenceOf]);
+    return grouping === "date" || grouping === "order" ? out : out.sort((a, b) => b[1].length - a[1].length);
+  }, [photos, grouping, q, stars, only, inArchive, ordering, sequenceOf]);
   const archivedCount = useMemo(() => photos.filter((p) => p.archived).length, [photos]);
   const pool = inArchive ? archivedCount : photos.length - archivedCount;
   const showing = new Set(groups.flatMap(([, list]) => list.map((p) => p.id))).size;
@@ -533,11 +537,11 @@ export function Photos() {
 
   return (
     <main className="app">
-      {view === "map" && <PhotoMap photos={onMap} onOpen={(id) => { setSpot(null); setConfirmDelete(false); setOpen(id); }} onSpot={(ids) => { setOpen(null); setSpot(ids); }} />}
-      {view === "map" && loaded && showing > onMap.length && (
+      {view === "map" && !phone && <PhotoMap photos={onMap} onOpen={(id) => { setSpot(null); setConfirmDelete(false); setOpen(id); }} onSpot={(ids) => { setOpen(null); setSpot(ids); }} />}
+      {view === "map" && !phone && loaded && showing > onMap.length && (
         <p className="pmap-note">{showing - onMap.length} {showing - onMap.length === 1 ? "photo has" : "photos have"} no place yet, so {showing - onMap.length === 1 ? "it is" : "they are"} not on the map.</p>
       )}
-      <div className={"list photos" + (selecting || (opened && !big) ? " with-panel" : "")} hidden={view === "map"}>
+      <div className={"list photos" + (selecting || (opened && !big) ? " with-panel" : "")} hidden={view === "map" && !phone}>
         {groups.map(([name, list]) => (
           <section key={name} className="pgroup">
             <h2 className="label cluster static">{name} <span>{list.length}</span>
@@ -586,6 +590,14 @@ export function Photos() {
           <span className="count">{busy ? `Uploading ${Math.min(busy.done + 1, busy.total)} of ${busy.total}` : reading > 0 ? `Reading ${reading}` : !loaded ? "" : showing === pool ? `${pool} ${pool === 1 ? "photo" : "photos"}${inArchive ? " archived" : ""}` : showing === 0 ? "No match" : `${showing} of ${pool}`}</span>
         </div>
         <button type="button" className="ink save always" disabled={!!busy} onClick={() => setAdding((a) => !a)}>Add photos</button>
+        {phone && (
+          <nav className="chips" aria-label="Filters">
+            <button type="button" className={!only && !stars && !inArchive ? "on" : ""} onClick={() => { setOnly(""); setStars(0); setInArchive(false); }}>All</button>
+            {projects.map((p) => <button key={p} type="button" className={only === p ? "on" : ""} onClick={() => setOnly(only === p ? "" : p)}>{p}</button>)}
+            <button type="button" className={stars === 4 ? "on" : ""} onClick={() => setStars(stars === 4 ? 0 : 4)}>4★ and up</button>
+            {(archivedCount > 0 || inArchive) && <button type="button" className={inArchive ? "on" : ""} onClick={() => { setOpen(null); setBig(false); setInArchive((x) => !x); }}>Archive {archivedCount}</button>}
+          </nav>
+        )}
       </header>
 
       {adding && (
@@ -657,7 +669,7 @@ export function Photos() {
           src={originals[opened.id] || (opened.view_path ? views[opened.view_path] : undefined) || (opened.thumb_path ? urls[opened.thumb_path] : undefined)}
           place={`${at + 1} of ${sequence.length}`}
           note={originals[opened.id] ? "original" : opened.view_path ? "" : "small preview"}
-          canLoad={!originals[opened.id] && !!opened.drive_id}
+          canLoad={!phone && !originals[opened.id] && !!opened.drive_id}
           onStep={step} onClose={closeBig} onInfo={toggleInfo} onRate={rate} onLoad={() => loadOriginal(opened)}
           archived={opened.archived} onArchive={() => setArchived([opened.id], !opened.archived)} />
       )}
