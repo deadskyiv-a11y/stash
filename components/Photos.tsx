@@ -719,7 +719,7 @@ export function Photos() {
       )}
 
       {selecting && (
-        <aside className="detail sheet" aria-label="Selected photos">
+        <aside className="detail tray" aria-label="Selected photos">
           <button type="button" className="pill-btn close" onClick={stopSelecting}>Done</button>
           <h2>{chosen.size} {chosen.size === 1 ? "photo" : "photos"} selected</h2>
           {chosen.size === 0 ? (

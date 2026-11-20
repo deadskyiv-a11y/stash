@@ -283,7 +283,8 @@ button { cursor: pointer; border: none; background: none; padding: 0; }
   .pmap-note { left: 16px; top: 132px; max-width: calc(100vw - 150px); }
   .list.photos.with-panel { padding-right: 16px; }
   /* On the phone the selection panel is a sheet across the bottom, so the photos above stay tappable. */
-  .detail.sheet { top: auto; width: 100%; max-height: 46vh; border-left: none; border-top: 1px solid var(--line); padding: 16px 16px 24px; }
+  /* Named tray, not sheet: .sheet is the print-only contact sheet and is hidden on screen. */
+  .detail.tray { top: auto; width: 100%; max-height: 46vh; border-left: none; border-top: 1px solid var(--line); padding: 16px 16px 24px; }
   .ptile[style] { max-width: 100%; }
   .top .pill-btn.phone { margin-left: auto; }
   .adder { right: 16px; top: 128px; width: calc(100vw - 32px); }
