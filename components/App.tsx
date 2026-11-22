@@ -222,9 +222,11 @@ function Library() {
       const r = await api<{ save: Save }>("/api/saves", body);
       // Same tile, new id: it travels from the Inbox to its group instead of blinking out and in.
       setSaves((s) => s.map((x) => (x.id === tempId ? { ...r.save, _key: tempId } : x)));
+      return true;
     } catch (e) {
       setSaves((s) => s.filter((x) => x.id !== tempId));
       say(e instanceof Error ? e.message : "Could not save");
+      return false;
     }
   }, [say]);
 
@@ -275,14 +277,15 @@ function Library() {
         const { data } = await supabase().auth.getUser();
         const path = `${data.user?.id}/upload-${crypto.randomUUID()}`;
         const up = data.user ? await supabase().storage.from("saves").upload(path, new Blob([bytes], { type: "image/jpeg" }), { contentType: "image/jpeg" }) : null;
-        if (up && !up.error) { add({ kind: "link", url, shot: path }, url); return; }
+        if (up && !up.error) return add({ kind: "link", url, shot: path }, url);
       } catch { /* a bad picture: save the link without it */ }
     }
     // Highlighted text arrives as a quote that remembers its page. Otherwise it is the page itself.
-    if (url && x.quote) add({ kind: "note", text: x.quote, url, from: x.from }, x.quote.slice(0, 60));
-    else if (url && x.img) add({ kind: "link", url, image: x.img }, url);
-    else addText(x.link);
-  }, [add, addText]);
+    if (url && x.quote) return add({ kind: "note", text: x.quote, url, from: x.from }, x.quote.slice(0, 60));
+    if (url) return add({ kind: "link", url, image: x.img || undefined }, url);
+    const text = x.link.trim();
+    return text ? add({ kind: "note", text }, text.slice(0, 60)) : false;
+  }, [add]);
 
   useEffect(() => {
     if (!incoming || !saveKey) return;
@@ -290,7 +293,9 @@ function Library() {
     queueMicrotask(() => {
       setIncoming(null);
       // The right key: save without a word. No key, or a wrong one: ask first.
-      if (x.k === saveKey) takeIn(x); else setAsking(x);
+      // The extension opens this page out of sight and waits for this mark, then closes the tab: "1" saved, "0" failed.
+      if (x.k === saveKey) takeIn(x).then((ok) => { document.documentElement.dataset.saved = ok ? "1" : "0"; });
+      else { document.documentElement.dataset.saved = "ask"; setAsking(x); }
     });
   }, [incoming, saveKey, takeIn]);
 

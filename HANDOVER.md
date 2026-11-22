@@ -107,6 +107,10 @@ in the repository, never echo it, never commit it.
   service (given the site name only), centred on white (`logoTile` in `lib/process.ts`). Icons
   under 64px are not used, so a few sites still fall back to the text tile. Confirmed on
   Vercel: the screenshot browser works there (Tweakit, Cargo). The logo tile is untried live.
+- **The extension saves in the background (v1.4).** With the share key it opens Stash in a tab out
+  of sight, waits for the page to mark `data-saved` on its root element ("1" saved, "0" failed,
+  "ask" for a wrong key), then closes the tab and shows a tick on its button. On failure it
+  brings the tab forward. Without a key it opens in front, as before, and learns the key. Untried.
 - The Arc extension (v1.3) sends its own screenshot of the visible tab when a page has no
   preview picture (`&shot=`), which works where a site turns the server away. Untried.
 - Tracking codes (`utm_*`, `fbclid`, `gclid` and similar) are stripped from saved links.

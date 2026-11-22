@@ -55,6 +55,32 @@ chrome.action.onClicked.addListener(async (tab) => {
   const { key } = await chrome.storage.local.get("key");
   const e = encodeURIComponent;
   const url = `${STASH}/#${key ? "k=" + e(key) + "&" : ""}save=${e(d.u)}${d.i ? "&img=" + e(d.i) : ""}${d.s ? "&q=" + e(d.s) + "&t=" + e(d.t) : ""}${shot ? "&shot=" + e(shot) : ""}`;
-  const made = await chrome.tabs.create({ url, index: tab.index + 1 });
-  if (!key && made.id) learnKey(made.id);
+  // With the key, Stash saves without asking, so its tab opens out of sight and is closed again when the save
+  // is done. A tick on the button says it worked. Without the key, the tab opens in front so the owner can answer.
+  const made = await chrome.tabs.create({ url, index: tab.index + 1, active: !key });
+  if (!made.id) return;
+  if (!key) { learnKey(made.id); return; }
+  chrome.action.setBadgeBackgroundColor({ color: "#111111" });
+  chrome.action.setBadgeText({ text: "…" });
+  let result = "";
+  for (let i = 0; i < 240 && !result; i++) {
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const [r] = await chrome.scripting.executeScript({ target: { tabId: made.id }, func: () => document.documentElement.dataset.saved || "" });
+      result = r?.result || "";
+    } catch {
+      result = "gone"; // the tab was closed by hand
+    }
+  }
+  if (result === "1") {
+    chrome.tabs.remove(made.id).catch(() => null);
+    chrome.action.setBadgeText({ text: "✓" });
+  } else {
+    // Not saved: a sign-in screen, a stale key, or an error. Bring the tab forward so the reason can be seen.
+    if (result === "ask") await chrome.storage.local.remove("key");
+    if (result !== "gone") chrome.tabs.update(made.id, { active: true }).catch(() => null);
+    chrome.action.setBadgeText({ text: "!" });
+    if (result === "ask") learnKey(made.id);
+  }
+  setTimeout(() => chrome.action.setBadgeText({ text: "" }), 4000);
 });
