@@ -4,6 +4,7 @@ import { createSave, makeRecipe, setPicture, type NewSave } from "@/lib/process"
 // Reading a long voice note or a large PDF can take well over a minute. Cut off early, a save was left half made.
 export const maxDuration = 300;
 
+const TRACKERS = /^(utm_[a-z]+|fbclid|gclid|gbraid|wbraid|dclid|msclkid|igshid|igsh|mc_cid|mc_eid|_hsenc|_hsmi|ref_src|ref_url|yclid|ttclid|twclid|li_fat_id|s_kwcid|vero_id|oly_anon_id|oly_enc_id)$/i;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function POST(req: Request) {
@@ -30,7 +31,10 @@ export async function POST(req: Request) {
     try {
       const u = new URL(body.url.trim());
       if (u.protocol === "http:" || u.protocol === "https:") {
-        input = { kind: "link", url: u.toString(), image: typeof body.image === "string" && /^https?:\/\//.test(body.image) ? body.image.slice(0, 2000) : undefined };
+        // Tracking codes say where a click came from, not what the page is. Without them the same page saved twice is one address.
+        for (const k of [...u.searchParams.keys()]) if (TRACKERS.test(k)) u.searchParams.delete(k);
+        const shot = typeof body.shot === "string" && body.shot.startsWith(`${a.userId}/upload-`) ? body.shot : undefined;
+        input = { kind: "link", url: u.toString(), shot, image: typeof body.image === "string" && /^https?:\/\//.test(body.image) ? body.image.slice(0, 2000) : undefined };
       }
     } catch { /* not an address */ }
   } else if (body?.kind === "note" && typeof body.text === "string" && body.text.trim()) {

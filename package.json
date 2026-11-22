@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
+    "@sparticuz/chromium": "^153.0.0",
     "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.119.2",
     "client-zip": "^2.5.1",
@@ -17,6 +18,7 @@
     "leaflet": "^1.9.4",
     "next": "16.4.6",
     "pdfjs-dist": "^6.5.438",
+    "puppeteer-core": "^25.18.1",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "sharp": "^0.35.5",

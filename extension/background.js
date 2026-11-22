@@ -33,9 +33,28 @@ chrome.action.onClicked.addListener(async (tab) => {
     // Some pages do not allow reading. The address alone is still saved.
   }
   if (!/^https?:/.test(d.u)) return;
+  // A page that offers no picture of its own: take one of what is on screen now, so the save is not left bare.
+  // This is the browser the owner is looking at, so it works where a site turns Stash's server away.
+  let shot = "";
+  if (!d.i && !d.s) {
+    try {
+      const full = await chrome.tabs.captureVisibleTab(tab.windowId, { format: "jpeg", quality: 80 });
+      const bmp = await createImageBitmap(await (await fetch(full)).blob());
+      const w = Math.min(1200, bmp.width), h = Math.round((bmp.height * w) / bmp.width);
+      const c = new OffscreenCanvas(w, h);
+      c.getContext("2d").drawImage(bmp, 0, 0, w, h);
+      const small = await c.convertToBlob({ type: "image/jpeg", quality: 0.72 });
+      const bytes = new Uint8Array(await small.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+      shot = btoa(bin);
+    } catch {
+      // No picture, then. The save still goes ahead.
+    }
+  }
   const { key } = await chrome.storage.local.get("key");
   const e = encodeURIComponent;
-  const url = `${STASH}/#${key ? "k=" + e(key) + "&" : ""}save=${e(d.u)}${d.i ? "&img=" + e(d.i) : ""}${d.s ? "&q=" + e(d.s) + "&t=" + e(d.t) : ""}`;
+  const url = `${STASH}/#${key ? "k=" + e(key) + "&" : ""}save=${e(d.u)}${d.i ? "&img=" + e(d.i) : ""}${d.s ? "&q=" + e(d.s) + "&t=" + e(d.t) : ""}${shot ? "&shot=" + e(shot) : ""}`;
   const made = await chrome.tabs.create({ url, index: tab.index + 1 });
   if (!key && made.id) learnKey(made.id);
 });

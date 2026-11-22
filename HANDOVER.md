@@ -93,6 +93,17 @@ in the repository, never echo it, never commit it.
   the video has one.
 - IMDb links: IMDb puts a robot check in front of its pages, so the title, plot and poster come
   from OMDb by IMDb number (`fromOmdb` in `lib/fetch-page.ts`, key `OMDB_API_KEY` in Vercel).
+- **No picture on the page: Stash takes a screenshot** (`lib/screenshot.ts`, added 22 November 2026).
+  A headless browser (`puppeteer-core` with `@sparticuz/chromium`, bundled through
+  `outputFileTracingIncludes` in `next.config.ts`) opens the page and pictures the top 1280 by
+  800. Every request the page makes passes the same public-address test as the link fetcher.
+  It gives no picture for an error page, a robot check (matched by page title), a non-HTML
+  link, or sites with sign-in walls (Instagram, TikTok, X and others). It adds a few seconds
+  to a bare save only. Tested on this Mac against Tweakit and Siteinspire with the installed
+  Chrome. **Not yet seen running on Vercel**: the first bare save there is the test.
+- The Arc extension (v1.3) sends its own screenshot of the visible tab when a page has no
+  preview picture (`&shot=`), which works where a site turns the server away. Untried.
+- Tracking codes (`utm_*`, `fbclid`, `gclid` and similar) are stripped from saved links.
 - Anything else that comes in bare: open the save and paste, drop or choose a picture
   ("Add picture" / "Change picture"). The AI re-reads the save with that picture and updates
   title, summary, tags, group and search.

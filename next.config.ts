@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["sharp", "undici"],
+  serverExternalPackages: ["sharp", "undici", "puppeteer-core", "@sparticuz/chromium"],
+  // The browser used for screenshots ships as packed files that the build cannot see by following imports.
+  outputFileTracingIncludes: { "/api/saves": ["./node_modules/@sparticuz/chromium/bin/**"] },
   async headers() {
     return [
       {

@@ -4,9 +4,10 @@ import { read, recipeFor, type Reading } from "./ai";
 import { embed, type Authed } from "./server";
 import { SAVE_COLUMNS, type Save } from "./types";
 import { audioExt, transcribe } from "./transcribe";
+import { screenshot } from "./screenshot";
 
 export type NewSave =
-  | { kind: "link"; url: string; image?: string }
+  | { kind: "link"; url: string; image?: string; shot?: string } // shot: a screenshot the owner's own browser took, already uploaded
   | { kind: "note"; text: string; url?: string; from?: string } // url and from: a quote, and the page it was taken from
   | { kind: "image"; path: string; name?: string }
   | { kind: "file"; path: string; name?: string; cover?: string }
@@ -188,6 +189,20 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
       // The browser button passes the picture Kofi's own browser saw, for sites that hide it from servers.
       if (!picture && input.image) {
         const raw = await fetchImage(input.image);
+        if (raw) picture = await storePicture(a, id, raw, 900);
+      }
+      // The page offered no picture. First choice: a screenshot Kofi's own browser took of it, sent by the extension.
+      if (input.shot) {
+        stored.push(input.shot);
+        if (!picture) {
+          const { data: file } = await a.db.storage.from("saves").download(input.shot);
+          if (file) picture = await storePicture(a, id, Buffer.from(await file.arrayBuffer()), 900);
+        }
+        await a.db.storage.from("saves").remove([input.shot]);
+      }
+      // Last resort: Stash opens the page in its own browser and takes the picture itself.
+      if (!picture) {
+        const raw = await screenshot(page?.url || input.url).catch(() => null);
         if (raw) picture = await storePicture(a, id, raw, 900);
       }
     } else if (input.kind === "image") {

@@ -210,7 +210,7 @@ function Library() {
   const shown = useMemo(() => (hits === null ? saves : saves.filter((s) => hits.has(s.id))), [saves, hits]);
   const opened = open ? saves.find((s) => s.id === open) || null : null;
 
-  const add = useCallback(async (body: { kind: "link"; url: string; image?: string } | { kind: "note"; text: string; url?: string; from?: string } | { kind: "image" | "file" | "voice"; path: string; name: string; cover?: string }, label: string) => {
+  const add = useCallback(async (body: { kind: "link"; url: string; image?: string; shot?: string } | { kind: "note"; text: string; url?: string; from?: string } | { kind: "image" | "file" | "voice"; path: string; name: string; cover?: string }, label: string) => {
     const tempId = "temp-" + crypto.randomUUID();
     const temp: Save = {
       id: tempId, kind: body.kind === "voice" ? "note" : body.kind, status: "processing", url: body.kind === "link" ? body.url : null, site: null, title: label, summary: null,
@@ -255,7 +255,7 @@ function Library() {
   }, []);
 
   // Something handed over in the address: /#save=<link>&k=<key>, with an optional picture, quote and page title.
-  type Incoming = { link: string; img: string | null; quote: string; from?: string; k: string };
+  type Incoming = { link: string; img: string | null; quote: string; from?: string; k: string; shot: string | null };
   const [incoming, setIncoming] = useState<Incoming | null>(null);
   const [asking, setAsking] = useState<Incoming | null>(null);
   useEffect(() => {
@@ -263,11 +263,21 @@ function Library() {
     const link = params.get("save");
     if (!link) return;
     history.replaceState(null, "", window.location.pathname);
-    queueMicrotask(() => setIncoming({ link, img: params.get("img"), quote: (params.get("q") || "").trim(), from: params.get("t") || undefined, k: params.get("k") || "" }));
+    queueMicrotask(() => setIncoming({ link, img: params.get("img"), quote: (params.get("q") || "").trim(), from: params.get("t") || undefined, k: params.get("k") || "", shot: params.get("shot") }));
   }, []);
 
-  const takeIn = useCallback((x: Incoming) => {
+  const takeIn = useCallback(async (x: Incoming) => {
     const url = looksLikeUrl(x.link.trim());
+    // The extension sent a screenshot it took of the page. Put it in storage and name it with the save.
+    if (url && x.shot && !x.quote) {
+      try {
+        const bytes = Uint8Array.from(atob(x.shot), (ch) => ch.charCodeAt(0));
+        const { data } = await supabase().auth.getUser();
+        const path = `${data.user?.id}/upload-${crypto.randomUUID()}`;
+        const up = data.user ? await supabase().storage.from("saves").upload(path, new Blob([bytes], { type: "image/jpeg" }), { contentType: "image/jpeg" }) : null;
+        if (up && !up.error) { add({ kind: "link", url, shot: path }, url); return; }
+      } catch { /* a bad picture: save the link without it */ }
+    }
     // Highlighted text arrives as a quote that remembers its page. Otherwise it is the page itself.
     if (url && x.quote) add({ kind: "note", text: x.quote, url, from: x.from }, x.quote.slice(0, 60));
     else if (url && x.img) add({ kind: "link", url, image: x.img }, url);
