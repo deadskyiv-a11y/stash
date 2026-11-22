@@ -210,6 +210,24 @@ function Library() {
   const shown = useMemo(() => (hits === null ? saves : saves.filter((s) => hits.has(s.id))), [saves, hits]);
   const opened = open ? saves.find((s) => s.id === open) || null : null;
 
+  // A PDF that arrived by link has no cover yet: the server cannot draw one. Draw its first page here and attach it.
+  // Quietly: if this fails, the save is still whole, with a text tile.
+  const coverPdf = useCallback(async (s: Save) => {
+    if (!s.file_path) return;
+    try {
+      const { data: link } = await supabase().storage.from("saves").createSignedUrl(s.file_path, 300);
+      const { data: who } = await supabase().auth.getUser();
+      if (!link?.signedUrl || !who.user) return;
+      const page1 = await pdfCover(await (await fetch(link.signedUrl)).blob());
+      if (!page1) return;
+      const path = `${who.user.id}/upload-${crypto.randomUUID()}`;
+      const up = await supabase().storage.from("saves").upload(path, page1, { contentType: "image/jpeg" });
+      if (up.error) return;
+      const r = await api<{ save: Save }>("/api/saves", { kind: "picture", id: s.id, path });
+      setSaves((all) => all.map((x) => (x.id === s.id ? { ...r.save, _key: x._key } : x)));
+    } catch { /* no cover */ }
+  }, []);
+
   const add = useCallback(async (body: { kind: "link"; url: string; image?: string; shot?: string } | { kind: "note"; text: string; url?: string; from?: string } | { kind: "image" | "file" | "voice"; path: string; name: string; cover?: string }, label: string) => {
     const tempId = "temp-" + crypto.randomUUID();
     const temp: Save = {
@@ -222,13 +240,14 @@ function Library() {
       const r = await api<{ save: Save }>("/api/saves", body);
       // Same tile, new id: it travels from the Inbox to its group instead of blinking out and in.
       setSaves((s) => s.map((x) => (x.id === tempId ? { ...r.save, _key: tempId } : x)));
+      if (r.save.kind === "file" && r.save.file_path && !r.save.image_path) coverPdf(r.save);
       return true;
     } catch (e) {
       setSaves((s) => s.filter((x) => x.id !== tempId));
       say(e instanceof Error ? e.message : "Could not save");
       return false;
     }
-  }, [say]);
+  }, [say, coverPdf]);
 
   const addText = useCallback((text: string) => {
     const t = text.trim();

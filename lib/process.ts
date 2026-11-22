@@ -1,5 +1,5 @@
 import sharp from "sharp";
-import { fetchImage, fetchPage, type Page } from "./fetch-page";
+import { fetchImage, fetchPage, fetchPdf, type Page } from "./fetch-page";
 import { read, recipeFor, type Reading } from "./ai";
 import { embed, type Authed } from "./server";
 import { SAVE_COLUMNS, type Save } from "./types";
@@ -162,6 +162,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     let text = "";
     let filePath: string | null = null;
     let pdf: Buffer | null = null;
+    let linked: Buffer | null = null; // a PDF fetched from a link
 
     if (input.kind === "voice") {
       stored.push(input.path);
@@ -195,6 +196,14 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
         if (c) picture = await storePicture(a, id, Buffer.from(await c.arrayBuffer()), 900);
         await a.db.storage.from("saves").remove([input.cover]);
       }
+    } else if (input.kind === "link" && (linked = await fetchPdf(input.url))) {
+      // The link is a PDF itself. Keep the document, as if it had been dropped in, and remember where it came from.
+      filePath = `${a.userId}/${id}.pdf`;
+      stored.push(filePath);
+      const up = await a.db.storage.from("saves").upload(filePath, linked, { contentType: "application/pdf", upsert: true });
+      if (up.error) throw new Error("Could not keep that PDF. " + up.error.message);
+      await a.db.from("saves").update({ kind: "file", file_path: filePath }).eq("id", id);
+      if (linked.length <= 15 * 1024 * 1024) pdf = linked;
     } else if (input.kind === "link") {
       try {
         page = await fetchPage(input.url);
@@ -246,10 +255,10 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     const voice = input.kind === "voice";
     // A recording that could not be turned into text has nothing for the AI to read.
     const reading: Reading | null = voice && !text ? null : await read({
-      kind: voice ? "voice note" : input.kind,
+      kind: voice ? "voice note" : linked ? "file" : input.kind,
       url: page?.url || source,
       site: page?.site || host,
-      title: page?.title || (input.kind === "image" || input.kind === "file" ? input.name : input.kind === "note" && input.from ? `Quote from: ${input.from}` : null),
+      title: page?.title || (linked ? decodeURIComponent(new URL(input.kind === "link" ? input.url : "http://x/").pathname.split("/").pop() || "").replace(/\.pdf$/i, "") || null : input.kind === "image" || input.kind === "file" ? input.name : input.kind === "note" && input.from ? `Quote from: ${input.from}` : null),
       description: page?.description,
       text,
       image: picture ? { data: picture.forAi, mediaType: "image/jpeg" } : null,
@@ -267,7 +276,7 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
     const subgroup = reading?.subgroup || null;
     const site = page?.site || host;
     const searchText = [title, summary, input.kind === "note" ? input.text : voice ? text : "", tags.join(" "), cluster, subgroup, site,
-      (reading?.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), input.kind === "file" ? "pdf document file" : voice ? "voice note recording" : input.kind,
+      (reading?.facts || []).map((f) => `${f.label} ${f.value}`).join(" "), input.kind === "file" || linked ? "pdf document file" : voice ? "voice note recording" : input.kind,
       reading?.recipe ? "recipe " + reading.recipe.ingredients.map((i) => i.item).join(" ") : ""].filter(Boolean).join(" ");
     const embedding = await embed(a, [title, summary, tags.join(", "), cluster, subgroup, text.slice(0, 1200)].filter(Boolean).join(". "));
 

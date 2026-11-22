@@ -249,3 +249,21 @@ export async function fetchImage(input: string): Promise<Buffer | null> {
     return null;
   }
 }
+
+/**
+ * A link that points straight at a PDF, not at a web page. Returns the document, or null when the link is
+ * something else, is over 20 MB, or cannot be fetched. Asks the server what the link is before downloading,
+ * so an ordinary page is not fetched twice.
+ */
+export async function fetchPdf(input: string): Promise<Buffer | null> {
+  try {
+    const named = /\.pdf$/i.test(new URL(input).pathname);
+    // Some servers refuse the "what is this" question. A link named .pdf is worth a try regardless.
+    const kind = await safeFetch(input, "application/pdf,*/*", 0, "HEAD").then((r) => r.type, () => "");
+    if (!named && !/application\/pdf/i.test(kind)) return null;
+    const { body } = await safeFetch(input, "application/pdf,*/*", 20_000_000);
+    return body.subarray(0, 5).toString("latin1") === "%PDF-" ? body : null;
+  } catch {
+    return null;
+  }
+}

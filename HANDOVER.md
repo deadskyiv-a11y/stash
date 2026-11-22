@@ -107,6 +107,11 @@ in the repository, never echo it, never commit it.
   service (given the site name only), centred on white (`logoTile` in `lib/process.ts`). Icons
   under 64px are not used, so a few sites still fall back to the text tile. Confirmed on
   Vercel: the screenshot browser works there (Tweakit, Cargo). The logo tile is untried live.
+- **A link that is itself a PDF** is fetched and kept like a dropped PDF (`fetchPdf` in
+  `lib/fetch-page.ts`, up to 20 MB): the row becomes kind `file` and keeps the link as its
+  source, the AI reads the document, and the browser draws the cover afterwards (`coverPdf` in
+  `components/App.tsx`). Signed download links expire, so an old one cannot be fetched later.
+  Detection is tested on this Mac. The full save is untried.
 - **The extension saves in the background (v1.4).** With the share key it opens Stash in a tab out
   of sight, waits for the page to mark `data-saved` on its root element ("1" saved, "0" failed,
   "ask" for a wrong key), then closes the tab and shows a tick on its button. On failure it
