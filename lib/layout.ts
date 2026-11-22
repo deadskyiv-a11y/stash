@@ -122,6 +122,10 @@ export function computeLayout(saves: Save[]): Layout {
       const oy = c.y + s.y + HEAD;
       if (s.item.name) {
         subs.push({ key: c.item.name + "/" + s.item.name, name: s.item.name, count: s.item.saves.length, x: ox, y: oy, cluster: c.item.name, sub: s.item.name });
+      } else if (c.item.packed.placed.length > 1) {
+        // Saves that belong to the group but to no sub-group of their own sit in a block beside the named ones.
+        // Unlabelled, that block looks as if it has drifted out of the group. Clicking the label shows the whole group.
+        subs.push({ key: c.item.name + "/~other", name: "Other", count: s.item.saves.length, x: ox, y: oy, cluster: c.item.name, sub: null });
       }
       for (const t of s.item.tiles) tiles.push({ ...t, x: ox + t.x, y: oy + t.y });
     }
