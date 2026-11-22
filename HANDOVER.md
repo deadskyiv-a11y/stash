@@ -100,7 +100,13 @@ in the repository, never echo it, never commit it.
   It gives no picture for an error page, a robot check (matched by page title), a non-HTML
   link, or sites with sign-in walls (Instagram, TikTok, X and others). It adds a few seconds
   to a bare save only. Tested on this Mac against Tweakit and Siteinspire with the installed
-  Chrome. **Not yet seen running on Vercel**: the first bare save there is the test.
+  Chrome, and confirmed on Vercel on 22 November 2026.
+- **Sites that turn the server away** (a robot check, as Siteinspire does) cannot be pictured from
+  the server, and Stash does not try to get round such checks, including through an archive or
+  mirror. The last fallback is a **logo tile**: the site's icon from Google's public icon
+  service (given the site name only), centred on white (`logoTile` in `lib/process.ts`). Icons
+  under 64px are not used, so a few sites still fall back to the text tile. Confirmed on
+  Vercel: the screenshot browser works there (Tweakit, Cargo). The logo tile is untried live.
 - The Arc extension (v1.3) sends its own screenshot of the visible tab when a page has no
   preview picture (`&shot=`), which works where a site turns the server away. Untried.
 - Tracking codes (`utm_*`, `fbclid`, `gclid` and similar) are stripped from saved links.

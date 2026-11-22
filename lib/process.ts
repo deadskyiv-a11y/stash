@@ -61,6 +61,26 @@ async function existingGroups(a: Authed) {
   return [...map.entries()].map(([cluster, s]) => ({ cluster, subgroups: [...s] }));
 }
 
+/**
+ * The last fallback for a link with no picture of any kind: the site's own logo, centred on white.
+ * White, because most logos carry a white background of their own; the pale-image edge then frames the tile.
+ * It is a designed stand-in, not a picture of the page, so a site that turns Stash away is still recognisable at a glance.
+ * The logo comes from Google's public icon service, which is told only the site's name, never the page.
+ */
+async function logoTile(host: string): Promise<Buffer | null> {
+  try {
+    const raw = await fetchImage(`https://www.google.com/s2/favicons?sz=256&domain=${encodeURIComponent(host)}`);
+    if (!raw) return null;
+    const meta = await sharp(raw).metadata();
+    // A tiny icon blown up is a smudge. Better the plain text tile than that.
+    if (!meta.width || meta.width < 64) return null;
+    const logo = await sharp(raw).resize({ width: 220, height: 220, fit: "inside", withoutEnlargement: true }).png().toBuffer();
+    return await sharp({ create: { width: 900, height: 600, channels: 3, background: "#ffffff" } }).composite([{ input: logo, gravity: "centre" }]).jpeg({ quality: 90 }).toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 /** Gives an existing save the picture Kofi supplied, for links whose site would not hand one over. */
 export async function setPicture(a: Authed, id: string, uploadPath: string): Promise<Save> {
   const { data: row } = await a.db.from("saves").select("kind,url,site,title,summary,content,tags,cluster,subgroup,pinned").eq("id", id).maybeSingle();
@@ -203,6 +223,11 @@ export async function createSave(a: Authed, input: NewSave): Promise<Save> {
       // Last resort: Stash opens the page in its own browser and takes the picture itself.
       if (!picture) {
         const raw = await screenshot(page?.url || input.url).catch(() => null);
+        if (raw) picture = await storePicture(a, id, raw, 900);
+      }
+      // The site would not be pictured at all (a robot check, usually). Stand its logo in, so the tile is not blank.
+      if (!picture) {
+        const raw = await logoTile(new URL(page?.url || input.url).hostname.replace(/^www\./, ""));
         if (raw) picture = await storePicture(a, id, raw, 900);
       }
     } else if (input.kind === "image") {
